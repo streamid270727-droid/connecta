@@ -78,6 +78,7 @@ export async function GET(
         _count: { select: { likes: true, comments: true, shares: true } },
         likes: { where: { userId: session.user.id }, select: { id: true } },
         shares: { where: { userId: session.user.id }, select: { id: true } },
+        savedBy: { where: { userId: session.user.id }, select: { id: true } },
         sharedFrom: {
           include: {
             author: {
@@ -139,6 +140,7 @@ export async function GET(
         author: p.author,
         liked: p.likes.length > 0,
         shared: p.shares.length > 0,
+        saved: p.savedBy.length > 0,
         _count: p._count,
         sharedFrom: p.sharedFrom
           ? {

@@ -49,6 +49,7 @@ import {
   ImageIcon,
   Users,
   Grid3x3,
+  Bookmark,
   Lock,
   Globe,
   RefreshCw,
@@ -110,7 +111,7 @@ export function ProfileView() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<"posts" | "friends" | "photos">("posts")
+  const [activeTab, setActiveTab] = useState<"posts" | "friends" | "photos" | "saved">("posts")
 
   // Friend action loading flags
   const [friendActionLoading, setFriendActionLoading] = useState(false)
@@ -572,7 +573,7 @@ export function ProfileView() {
       <div className="px-2 sm:px-4 mt-4">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
           <div className="sticky top-14 sm:top-16 z-20 bg-background/80 glass -mx-2 sm:-mx-4 px-2 sm:px-4 py-2 border-b">
-            <TabsList className="w-full grid grid-cols-3 h-9">
+            <TabsList className={cn("w-full grid h-9", user.isOwnProfile ? "grid-cols-4" : "grid-cols-3")}>
               <TabsTrigger value="posts" className="gap-1.5">
                 <Grid3x3 className="size-3.5" />
                 Postingan
@@ -585,6 +586,12 @@ export function ProfileView() {
                 <ImageIcon className="size-3.5" />
                 Foto
               </TabsTrigger>
+              {user.isOwnProfile && (
+                <TabsTrigger value="saved" className="gap-1.5">
+                  <Bookmark className="size-3.5" />
+                  Tersimpan
+                </TabsTrigger>
+              )}
             </TabsList>
           </div>
 
@@ -697,6 +704,13 @@ export function ProfileView() {
               </div>
             )}
           </TabsContent>
+
+          {/* Saved tab (own profile only) */}
+          {user.isOwnProfile && (
+            <TabsContent value="saved" className="mt-3">
+              <SavedPostsTab />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 
@@ -721,18 +735,163 @@ export function ProfileView() {
         <DialogContent
           className="max-w-4xl p-0 overflow-hidden bg-black/90 border-none"
           showCloseButton
+          aria-label="Pratinjau foto"
         >
+          <DialogHeader className="sr-only">
+            <DialogTitle>Pratinjau Foto</DialogTitle>
+            <DialogDescription>
+              Klik di luar foto atau tekan Escape untuk menutup.
+            </DialogDescription>
+          </DialogHeader>
           <div className="flex items-center justify-center min-h-[60vh] max-h-[90vh]">
             {photoLightbox && (
               <img
                 src={photoLightbox}
-                alt=""
+                alt="Foto profil dalam ukuran penuh"
                 className="max-w-full max-h-[90vh] object-contain"
               />
             )}
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// ============================================================
+// Saved Posts Tab
+// ============================================================
+function SavedPostsTab() {
+  const { toast } = useToast()
+  const { openProfile } = useAppStore()
+  const [posts, setPosts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const load = async () => {
+    try {
+      const res = await fetch("/api/posts/saved")
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setPosts(data.posts || [])
+    } catch {
+      toast({ title: "Gagal memuat simpanan", variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUnsave = async (postId: string) => {
+    setRemovedIds((prev) => new Set(prev).add(postId))
+    try {
+      const res = await fetch(`/api/posts/${postId}/save`, { method: "POST" })
+      if (!res.ok) throw new Error()
+      setPosts((prev) => prev.filter((p) => p.id !== postId))
+      toast({ title: "Dihapus dari simpanan" })
+    } catch {
+      setRemovedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(postId)
+        return next
+      })
+      toast({ title: "Gagal", variant: "destructive" })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="rounded-xl border bg-card p-4 animate-pulse">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="size-8 rounded-full bg-muted" />
+              <div className="flex-1 space-y-1">
+                <div className="h-3 w-24 rounded bg-muted" />
+                <div className="h-2 w-16 rounded bg-muted" />
+              </div>
+            </div>
+            <div className="h-3 w-full rounded bg-muted mb-1" />
+            <div className="h-3 w-2/3 rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (posts.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Bookmark className="size-12 mx-auto mb-3 text-muted-foreground/40" />
+        <h3 className="font-semibold mb-1">Belum ada postingan tersimpan</h3>
+        <p className="text-sm text-muted-foreground">
+          Postingan yang Anda simpan akan muncul di sini.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {posts.map((post) => (
+        <div key={post.id} className="rounded-xl border bg-card p-4 hover:shadow-sm transition-shadow">
+          <div className="flex items-center gap-2 mb-2">
+            <button onClick={() => openProfile(post.author.id)}>
+              <img
+                src={post.author.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${post.author.name}`}
+                alt={post.author.name}
+                className="size-8 rounded-full object-cover"
+              />
+            </button>
+            <div className="flex-1 min-w-0">
+              <button
+                onClick={() => openProfile(post.author.id)}
+                className="text-sm font-semibold hover:underline truncate block"
+              >
+                {post.author.name}
+              </button>
+              <span className="text-xs text-muted-foreground">
+                @{post.author.username}
+              </span>
+            </div>
+            <button
+              onClick={() => handleUnsave(post.id)}
+              disabled={removedIds.has(post.id)}
+              className="size-8 rounded-full hover:bg-accent flex items-center justify-center text-muted-foreground"
+              aria-label="Hapus dari simpanan"
+              title="Hapus dari simpanan"
+            >
+              <Bookmark className="size-4 fill-current text-primary" />
+            </button>
+          </div>
+          <p className="text-sm whitespace-pre-wrap break-words line-clamp-3 mb-2">
+            {post.content || "(tanpa teks)"}
+          </p>
+          {post.images?.length > 0 && (
+            <div className="grid grid-cols-2 gap-1 mb-2">
+              {post.images.slice(0, 4).map((img: string, i: number) => (
+                <img
+                  key={i}
+                  src={img}
+                  alt=""
+                  className="aspect-square w-full object-cover rounded-md"
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>{post._count?.likes || 0} suka</span>
+            <span>{post._count?.comments || 0} komentar</span>
+            <span className="ml-auto">
+              Disimpan {post.savedAt ? new Date(post.savedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" }) : ""}
+            </span>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

@@ -258,3 +258,100 @@ Unresolved issues / recommendations for next phase:
 - The chat service may still die if the system is restarted. The cron job should run `bash scripts/start-services.sh` at the start of each execution to ensure both services are up.
 - Consider adding a health-check endpoint to the chat service for more robust monitoring.
 - The sidebar "Pesan" button has an unread badge that can cover the button's click target in automated testing (not a real UX issue for human users, but affects Agent Browser testing).
+
+---
+Task ID: 6
+Agent: main (webDevReview cron job)
+Task: QA testing, bug fixes, and new feature development (Stories, Saved Posts, Edit Post, Trending Topics, Online Users)
+
+## Current Project Status Assessment
+Connecta MVP is stable and fully functional. Both services (Next.js port 3000, Socket.io chat port 3003) verified running. All 7 PRD core feature areas working: Auth, Profile, Social Graph, News Feed, Posts & Interactions, Notifications, Direct Messaging. No runtime errors found during QA via agent-browser across all views (feed, discover, friends, notifications, messages, profile, settings, search). Minor accessibility warnings found (missing DialogDescription on composer + image viewer dialogs) — fixed this round.
+
+## Completed Modifications This Round
+
+### 1. Bug Fixes — Accessibility (Task ID: 6-a)
+- Fixed `post-card.tsx` image viewer dialog: added `DialogHeader` with `DialogTitle` ("Pratinjau Gambar") + `DialogDescription` (sr-only) + `aria-label` + descriptive `alt` text. Previously missing both title and description → radix accessibility error.
+- Fixed `post-composer-dialog.tsx`: added `DialogDescription` ("Bagikan pembaruan teks, foto, atau video...") as sr-only under the existing DialogTitle "Buat Postingan".
+- Fixed `profile-view.tsx` photo lightbox dialog: added `DialogHeader` with `DialogTitle` ("Pratinjau Foto") + `DialogDescription` (sr-only) + `aria-label` + descriptive `alt` text.
+- Imported `DialogDescription` where missing.
+
+### 2. New Feature — Stories (Task ID: 6-b) [HIGH IMPACT]
+**Schema**: Added `Story` model (id, authorId, mediaUrl, content, bgColor, textColor, createdAt, expiresAt) + `StoryView` model (id, storyId, userId, viewedAt, unique on [storyId,userId]). Stories auto-expire after 24h.
+
+**API Routes**:
+- `GET /api/stories` — returns active (non-expired) story groups from current user + friends, grouped by author, with viewed status and view counts.
+- `POST /api/stories` — create a story (text with gradient background OR image upload).
+- `DELETE /api/stories/[id]` — delete own story.
+- `POST /api/stories/[id]/view` — mark story as viewed (upsert).
+
+**UI Components**:
+- `stories-bar.tsx` — horizontal scrollable bar of story circles at top of feed. Current user's story first (with "+" add button or "Story Anda" if exists), then friends' stories. Gradient ring for unviewed, muted ring for viewed. Includes `StoryComposer` dialog with 8 gradient presets, text input (280 char), and image upload option. Live preview shows story as it will appear.
+- `story-viewer.tsx` — full-screen story viewer with: progress bars per story, auto-advance (5s), tap left/right thirds to navigate, center tap to pause/play, keyboard navigation (Escape/Arrow keys/Space), author header with avatar + verified badge + relative time, view count + delete button for own stories, group indicator dots, caption overlay for image stories with text.
+
+### 3. New Feature — Saved Posts / Bookmarks (Task ID: 6-c)
+**Schema**: Added `SavedPost` model (id, postId, userId, createdAt, unique on [postId,userId]). Added `savedBy SavedPost[]` relation to Post model.
+
+**API Routes**:
+- `POST /api/posts/[id]/save` — toggle save/unsave a post.
+- `GET /api/posts/saved` — list all posts saved by current user (with full post data including author, counts, savedAt).
+
+**UI Changes**:
+- Added `saved` field to all post API responses (posts list, single post, user profile posts).
+- Added Bookmark quick-action button to `PostCard` action bar (4th button after Like/Comment/Share), with fill state when saved.
+- Added "Simpan"/"Hapus dari Simpanan" option in post dropdown menu (fixed bug where "Simpan" was incorrectly opening image viewer).
+- Added "Tersimpan" (4th) tab to Profile view (own profile only), showing saved posts with author info, content preview, image grid, like/comment counts, and unsave button. Loading skeleton + empty state included.
+
+### 4. New Feature — Post Editing (Task ID: 6-d)
+**API Route**: `PUT /api/posts/[id]/edit` — edit own post content (text only, max 5000 chars). Validates ownership.
+
+**UI**: Added `EditPostDialog` component to `PostCard` — accessible via dropdown menu "Edit" option (own posts only). Dialog has Textarea with character count, Cancel/Save buttons, optimistic update on save.
+
+### 5. New Feature — Trending Topics (Task ID: 6-e)
+**API Route**: `GET /api/trending` — extracts hashtags (#tag) from posts in last 48h, counts occurrences, returns top 5. Falls back to common word extraction if no hashtags found (filters stop words in Indonesian + English).
+
+**UI**: Added Trending panel to `RightSidebar` (between Online Friends and Suggestions). Shows flame icon, "Trending" title, "48 jam" subtitle, ranked list with # prefix and post count. Clicking a trending topic navigates to Search view with the hashtag.
+
+### 6. New Feature — Online Users Widget (Task ID: 6-f)
+**API Route**: `GET /api/users/online` — returns friends sorted by most recent activity (last post or message), top 6. Approximates "online" for MVP since true socket presence isn't exposed to the API layer.
+
+**UI**: Updated `RightSidebar` Online Friends section — now uses the new `/api/users/online` endpoint (was using `/api/friends`). Renamed header to "Teman Aktif" with Activity icon and animated green pulse dot showing count.
+
+### 7. Seed Data Updates (Task ID: 6-g)
+Updated `prisma/seed.ts` to include:
+- 5 active stories (4 from friends + 1 from demo user) with various gradient backgrounds and text content. 2 marked as viewed by demo user. Demo user's story has 3 views.
+- 2 saved posts for demo user.
+- 6 posts with hashtags (#connecta, #coding, #travel, #bali, #photography, #seni, #kopi, #belajar, #kuliah, #tips, #senang) for trending.
+- Cleanup section updated to clear new tables (savedPost, storyView, story).
+
+### 8. Infrastructure (Task ID: 6-h)
+- Updated `scripts/start-services.sh` to auto-restart BOTH the Next.js dev server AND chat service if they're down (previously only restarted chat service). Uses `setsid bash -c 'bun run dev' < /dev/null` for persistent background execution.
+- Regenerated Prisma client after schema changes (`bun run db:push`).
+
+## Verification Results
+- `bun run lint`: ✅ 0 errors, 0 warnings
+- `npx tsc --noEmit`: ✅ 0 errors (excluding pre-existing skills/* errors)
+- All new API routes return 200 with correct data (verified via curl with auth session):
+  - `/api/stories` → 5 story groups with correct structure
+  - `/api/trending` → trending tags: coding(2), design(1), branding(1), connecta(1), senang(1)
+  - `/api/users/online` → Siti, Budi, and 4 other active friends
+  - `/api/posts/saved` → saved posts with full data
+  - `/api/posts?scope=friends` → posts now include `saved` field (previously 500 error due to missing Prisma client regeneration — FIXED)
+- No 500 errors in dev.log after fixes
+- Browser verification: Stories bar visible at top of feed, Bookmark buttons present on posts, Profile has 4th "Tersimpan" tab
+
+## Unresolved Issues / Risks
+1. **Dev server persistence**: The Next.js dev server (port 3000) gets killed between bash tool calls in this sandbox environment. The chat service (port 3003) persists with `setsid` but the dev server is less stable. The `scripts/start-services.sh` script can restart it, but the cron job should run this script at the start of each execution. The app works correctly while the dev server is running — this is purely a process lifecycle issue, not a code issue.
+2. **Online presence accuracy**: The `/api/users/online` endpoint approximates "online" by last activity time rather than true socket presence. For V2, the chat service should expose a presence API that the Next.js backend can query.
+3. **Story media uploads**: Currently stories support text+gradient OR a single image. Video stories are not yet supported (could be added in V2).
+4. **Story replies**: Stories can be viewed but not replied to (DM reply from story). Could be added in V2.
+5. **Trending accuracy**: Trending uses simple hashtag counting from last 48h. Could be improved with normalization, spam filtering, and personalized trending in V2.
+
+## Priority Recommendations for Next Phase
+1. **Stories Replies** — Allow users to reply to stories via DM (high engagement feature).
+2. **Story Highlights** — Allow users to pin stories to their profile as highlights (persistent, unlike 24h stories).
+3. **Reactions** — Extend the single "Like" to multiple emoji reactions (Love, Haha, Wow, Sad, Angry) for richer interactions.
+4. **Comment Editing/Delete** — Currently comments can only be created; add edit/delete for own comments.
+5. **Post Drafts** — Auto-save post drafts when composing (localStorage) so users don't lose content on accidental close.
+6. **Search Filters** — Add filters to search (People/Posts/Photos tabs, date range, sort by).
+7. **Real Online Presence** — Expose socket presence map from chat service via an API endpoint for accurate online status.
+8. **Performance** — Add pagination to stories, optimize feed queries with database indexes on hot paths.

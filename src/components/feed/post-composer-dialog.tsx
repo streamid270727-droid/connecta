@@ -24,6 +24,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog"
 import type { FeedPost } from "@/components/feed/post-card"
 
@@ -155,6 +156,9 @@ export function PostComposerDialog() {
           <DialogTitle className="text-center text-lg font-bold">
             Buat Postingan
           </DialogTitle>
+          <DialogDescription className="text-center text-xs sr-only">
+            Bagikan pembaruan teks, foto, atau video dengan teman Anda.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="p-4 space-y-3">

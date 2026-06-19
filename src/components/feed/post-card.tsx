@@ -14,6 +14,7 @@ import {
   Globe,
   CheckCircle2,
   Play,
+  Pencil,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -55,6 +56,7 @@ export interface FeedPost {
   }
   liked: boolean
   shared: boolean
+  saved?: boolean
   _count: { likes: number; comments: number; shares: number }
   sharedFrom?: {
     id: string
@@ -80,8 +82,10 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
   const [likeLoading, setLikeLoading] = useState(false)
   const [shareLoading, setShareLoading] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [saveLoading, setSaveLoading] = useState(false)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [imageViewer, setImageViewer] = useState<string | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const isOwn = session?.user?.id === post.author.id
   const ytId = post.videoUrl ? getYouTubeId(post.videoUrl) : null
@@ -164,6 +168,30 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
     }
   }
 
+  const handleSave = async () => {
+    if (saveLoading) return
+    setSaveLoading(true)
+    const wasSaved = !!post.saved
+    onUpdate(post.id, { saved: !wasSaved })
+    try {
+      const res = await fetch(`/api/posts/${post.id}/save`, { method: "POST" })
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      onUpdate(post.id, { saved: data.saved })
+      toast({
+        title: data.saved ? "Disimpan" : "Dihapus",
+        description: data.saved
+          ? "Postingan disimpan ke koleksi Anda"
+          : "Postingan dihapus dari koleksi",
+      })
+    } catch {
+      onUpdate(post.id, { saved: wasSaved })
+      toast({ title: "Gagal", variant: "destructive" })
+    } finally {
+      setSaveLoading(false)
+    }
+  }
+
   const toggleComments = () => setShowComments((v) => !v)
 
   return (
@@ -207,13 +235,21 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                 <Share2 className="size-4" />
                 Bagikan
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setImageViewer(post.id)}>
-                <Bookmark className="size-4" />
-                Simpan
+              <DropdownMenuItem onClick={handleSave} disabled={saveLoading}>
+                {saveLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Bookmark className={cn("size-4", post.saved && "fill-current text-primary")} />
+                )}
+                {post.saved ? "Hapus dari Simpanan" : "Simpan"}
               </DropdownMenuItem>
               {isOwn && (
                 <>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
+                    <Pencil className="size-4" />
+                    Edit
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
                     onClick={handleDelete}
@@ -347,6 +383,37 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
             icon={<Share2 className="size-4" />}
             label="Bagikan"
           />
+          <button
+            onClick={handleSave}
+            disabled={saveLoading}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors hover:bg-muted/60 sm:hidden",
+              post.saved ? "text-primary" : "text-muted-foreground"
+            )}
+            aria-label={post.saved ? "Hapus dari simpanan" : "Simpan"}
+          >
+            {saveLoading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Bookmark className={cn("size-4", post.saved && "fill-current")} />
+            )}
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saveLoading}
+            className={cn(
+              "hidden sm:flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors hover:bg-muted/60",
+              post.saved ? "text-primary" : "text-muted-foreground"
+            )}
+            aria-label={post.saved ? "Hapus dari simpanan" : "Simpan"}
+            title={post.saved ? "Hapus dari simpanan" : "Simpan"}
+          >
+            {saveLoading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Bookmark className={cn("size-4", post.saved && "fill-current")} />
+            )}
+          </button>
         </div>
 
         {/* Comments */}
@@ -404,18 +471,117 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
       {/* Image viewer */}
       {imageViewer && (
         <Dialog open={!!imageViewer} onOpenChange={(o) => !o && setImageViewer(null)}>
-          <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/90 border-none">
+          <DialogContent
+            className="max-w-4xl p-0 overflow-hidden bg-black/90 border-none"
+            aria-label="Pratinjau gambar"
+          >
+            <DialogHeader className="sr-only">
+              <DialogTitle>Pratinjau Gambar</DialogTitle>
+              <DialogDescription>
+                Klik di luar gambar atau tekan Escape untuk menutup.
+              </DialogDescription>
+            </DialogHeader>
             <div className="flex items-center justify-center min-h-[60vh] max-h-[90vh]">
               <img
                 src={imageViewer}
-                alt=""
+                alt="Gambar postingan dalam ukuran penuh"
                 className="max-w-full max-h-[90vh] object-contain"
               />
             </div>
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Edit post dialog */}
+      <EditPostDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        post={post}
+        onUpdated={(content) => {
+          onUpdate(post.id, { content })
+          setEditDialogOpen(false)
+        }}
+      />
     </>
+  )
+}
+
+function EditPostDialog({
+  open,
+  onOpenChange,
+  post,
+  onUpdated,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  post: FeedPost
+  onUpdated: (content: string) => void
+}) {
+  const { toast } = useToast()
+  const [content, setContent] = useState(post.content)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (open) setContent(post.content)
+  }, [open, post.content])
+
+  const submit = async () => {
+    if (loading) return
+    if (!content.trim()) {
+      toast({ title: "Konten tidak boleh kosong", variant: "destructive" })
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/posts/${post.id}/edit`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: content.trim() }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        toast({ title: "Gagal", description: data.error, variant: "destructive" })
+      } else {
+        toast({ title: "Diperbarui", description: "Postingan telah diperbarui" })
+        onUpdated(content.trim())
+      }
+    } catch {
+      toast({ title: "Terjadi kesalahan", variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Postingan</DialogTitle>
+          <DialogDescription className="sr-only">
+            Perbarui teks postingan Anda.
+          </DialogDescription>
+        </DialogHeader>
+        <Textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          className="min-h-32 max-h-64 resize-none"
+          maxLength={5000}
+          autoFocus
+        />
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-muted-foreground">{content.length}/5000</span>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+              Batal
+            </Button>
+            <Button onClick={submit} disabled={loading || !content.trim()}>
+              {loading ? <Loader2 className="size-4 animate-spin" /> : null}
+              Simpan
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

@@ -6,6 +6,7 @@
 PROJECT_DIR="/home/z/my-project"
 CHAT_SERVICE_DIR="$PROJECT_DIR/mini-services/chat-service"
 CHAT_LOG="$PROJECT_DIR/chat-service.log"
+DEV_LOG="$PROJECT_DIR/dev.log"
 
 # Colors for output
 RED='\033[0;31m'
@@ -21,7 +22,18 @@ if [ "$NEXTJS_STATUS" = "200" ]; then
   echo -e "${GREEN}✓${NC} Next.js dev server is running on port 3000 (HTTP 200)"
 else
   echo -e "${RED}✗${NC} Next.js dev server is not responding (HTTP $NEXTJS_STATUS)"
-  echo -e "${YELLOW}  → Start it with: cd $PROJECT_DIR && bun run dev (in background)${NC}"
+  echo -e "${YELLOW}  → Restarting Next.js dev server...${NC}"
+  cd "$PROJECT_DIR"
+  setsid bash -c 'bun run dev' < /dev/null > "$DEV_LOG" 2>&1 &
+  disown
+  sleep 12
+  # Verify it started
+  NEXTJS_STATUS2=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ 2>/dev/null)
+  if [ "$NEXTJS_STATUS2" = "200" ]; then
+    echo -e "${GREEN}✓${NC} Next.js dev server restarted successfully on port 3000"
+  else
+    echo -e "${RED}✗${NC} Next.js dev server failed to restart. Check $DEV_LOG${NC}"
+  fi
 fi
 
 # 2. Check chat service (port 3003)
@@ -32,9 +44,9 @@ elif [ "$CHAT_STATUS" = "000" ]; then
   echo -e "${RED}✗${NC} Chat service is DOWN (connection refused)"
   echo -e "${YELLOW}  → Restarting chat service...${NC}"
   cd "$CHAT_SERVICE_DIR"
-  setsid nohup bun run dev > "$CHAT_LOG" 2>&1 &
+  setsid bash -c 'bun run dev' < /dev/null > "$CHAT_LOG" 2>&1 &
   disown
-  sleep 2
+  sleep 3
   # Verify it started
   CHAT_STATUS2=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3003/ 2>/dev/null)
   if [ "$CHAT_STATUS2" = "400" ] || [ "$CHAT_STATUS2" = "426" ]; then

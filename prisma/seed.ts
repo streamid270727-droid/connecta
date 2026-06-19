@@ -30,6 +30,9 @@ async function main() {
   await db.comment.deleteMany()
   await db.share.deleteMany()
   await db.like.deleteMany()
+  await db.savedPost.deleteMany()
+  await db.storyView.deleteMany()
+  await db.story.deleteMany()
   await db.post.deleteMany()
   await db.session.deleteMany()
   await db.account.deleteMany()
@@ -458,6 +461,103 @@ async function main() {
     },
   })
   console.log("  ✓ Created second conversation")
+
+  // Stories (active, not expired)
+  const storyGradients = [
+    "from-rose-500 to-pink-600",
+    "from-violet-500 to-purple-700",
+    "from-amber-400 to-orange-600",
+    "from-emerald-400 to-teal-600",
+    "from-sky-400 to-cyan-600",
+  ]
+  const storyContents = [
+    "Selamat pagi! ☀️ Semoga harimu menyenangkan.",
+    "Lagi ngopi di tempat favorit ☕",
+    "Selamat weekend semuanya! 🎉",
+    "Jangan lupa istirahat ya 💚",
+    "Hari yang produktif! 💪",
+  ]
+
+  const now = Date.now()
+  // Stories from friends (created in the last few hours, expire in 24h)
+  for (let i = 0; i < 4; i++) {
+    const author = createdUsers[i]
+    const createdAt = new Date(now - (i + 1) * 1000 * 60 * 60) // 1-4h ago
+    await db.story.create({
+      data: {
+        authorId: author.id,
+        content: storyContents[i],
+        bgColor: storyGradients[i],
+        textColor: "#ffffff",
+        createdAt,
+        expiresAt: new Date(createdAt.getTime() + 24 * 60 * 60 * 1000),
+      },
+    })
+    // Mark as viewed by demo user (for the first 2)
+    if (i < 2) {
+      const story = await db.story.findFirst({
+        where: { authorId: author.id },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      })
+      if (story) {
+        await db.storyView.create({
+          data: { storyId: story.id, userId: demoUser.id },
+        })
+      }
+    }
+  }
+
+  // Demo user's own story
+  const myStoryTime = new Date(now - 1000 * 60 * 30) // 30 min ago
+  const myStory = await db.story.create({
+    data: {
+      authorId: demoUser.id,
+      content: "Selamat datang di Connecta! ✨",
+      bgColor: "from-fuchsia-500 to-pink-700",
+      textColor: "#ffffff",
+      createdAt: myStoryTime,
+      expiresAt: new Date(myStoryTime.getTime() + 24 * 60 * 60 * 1000),
+    },
+  })
+  // Some views on demo user's story
+  for (let i = 0; i < 3; i++) {
+    try {
+      await db.storyView.create({
+        data: { storyId: myStory.id, userId: createdUsers[i].id },
+      })
+    } catch {}
+  }
+  console.log("  ✓ Created stories (5 active)")
+
+  // Saved posts — demo user saves 2 posts
+  const postsToSave = createdPosts.slice(2, 4)
+  for (const p of postsToSave) {
+    await db.savedPost.create({
+      data: { postId: p.id, userId: demoUser.id },
+    })
+  }
+  console.log("  ✓ Created saved posts (2)")
+
+  // Posts with hashtags for trending
+  const hashtagPosts = [
+    { authorId: createdUsers[0].id, content: "Lagi senang banget hari ini #connecta #senang" },
+    { authorId: createdUsers[1].id, content: "Tips coding pagi ini: selalu tulis komentar! #coding #tips" },
+    { authorId: createdUsers[2].id, content: "Liburan ke Bali memang terbaik #travel #bali" },
+    { authorId: createdUsers[3].id, content: "Fotografi itu tentang momen #photography #seni" },
+    { authorId: demoUser.id, content: "Ngopi sambil kerja, paling enak #kopi #coding" },
+    { authorId: createdUsers[4].id, content: "Belajar sambil santai #belajar #kuliah" },
+  ]
+  for (const p of hashtagPosts) {
+    await db.post.create({
+      data: {
+        content: p.content,
+        authorId: p.authorId,
+        createdAt: new Date(now - Math.random() * 1000 * 60 * 60 * 12), // last 12h
+      },
+    })
+  }
+  console.log("  ✓ Created hashtag posts for trending (6)")
 
   console.log("\n✅ Seeding complete!")
   console.log("\n📋 Demo credentials:")

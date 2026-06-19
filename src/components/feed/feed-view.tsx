@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { PostCard, type FeedPost } from "@/components/feed/post-card"
 import { PostComposerInline } from "@/components/feed/post-composer-inline"
+import { StoriesBar } from "@/components/stories/stories-bar"
 import { Button } from "@/components/ui/button"
 import { Loader2, RefreshCw, Sparkles, Users } from "lucide-react"
 import { useAppStore } from "@/lib/store"
@@ -150,6 +151,7 @@ export function FeedView() {
       </div>
 
       <div className="px-2 sm:px-4 py-2 space-y-3 sm:space-y-4">
+        <StoriesBar />
         <PostComposerInline onPosted={handleNewPost} />
 
         {loading ? (

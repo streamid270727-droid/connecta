@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { Sparkles, TrendingUp, UserPlus } from "lucide-react"
+import { Sparkles, TrendingUp, UserPlus, Hash, Flame, Activity } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
@@ -19,19 +19,26 @@ interface SuggestedUser {
   mutualFriends: number
 }
 
+interface TrendingTopic {
+  tag: string
+  count: number
+}
+
 export function RightSidebar() {
   const { data: session } = useSession()
-  const { openProfile, openConversation } = useAppStore()
+  const { openProfile, openConversation, setSearchQuery, setView } = useAppStore()
   const [suggestions, setSuggestions] = useState<SuggestedUser[]>([])
   const [onlineFriends, setOnlineFriends] = useState<
     { id: string; name: string; username: string; avatarUrl: string | null }[]
   >([])
+  const [trending, setTrending] = useState<TrendingTopic[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!session?.user?.id) return
     void loadSuggestions()
     void loadOnlineFriends()
+    void loadTrending()
   }, [session?.user?.id])
 
   const loadSuggestions = async () => {
@@ -48,24 +55,33 @@ export function RightSidebar() {
 
   const loadOnlineFriends = async () => {
     try {
-      const res = await fetch("/api/friends")
+      const res = await fetch("/api/users/online")
       if (res.ok) {
         const data = await res.json()
-        // For demo: show first 8 friends as "online"
-        setOnlineFriends(
-          (data.friends || []).slice(0, 8).map((f: any) => ({
-            id: f.id,
-            name: f.name,
-            username: f.username,
-            avatarUrl: f.avatarUrl,
-          }))
-        )
+        setOnlineFriends(data.users || [])
       }
     } catch (e) {
       // ignore
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadTrending = async () => {
+    try {
+      const res = await fetch("/api/trending")
+      if (res.ok) {
+        const data = await res.json()
+        setTrending(data.trending || [])
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  const searchTrending = (tag: string) => {
+    setSearchQuery(`#${tag}`)
+    setView("search")
   }
 
   const sendRequest = async (userId: string) => {
@@ -90,9 +106,13 @@ export function RightSidebar() {
       {/* Online friends */}
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-sm">Teman Online</h3>
-          <span className="text-xs text-muted-foreground">
-            {onlineFriends.length} aktif
+          <div className="flex items-center gap-2">
+            <Activity className="size-4 text-emerald-500" />
+            <h3 className="font-semibold text-sm">Teman Aktif</h3>
+          </div>
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            {onlineFriends.length} online
           </span>
         </div>
         {loading ? (
@@ -137,6 +157,37 @@ export function RightSidebar() {
           </ScrollArea>
         )}
       </Card>
+
+      {/* Trending topics */}
+      {trending.length > 0 && (
+        <Card className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Flame className="size-4 text-orange-500" />
+            <h3 className="font-semibold text-sm">Trending</h3>
+            <span className="text-xs text-muted-foreground ml-auto">48 jam</span>
+          </div>
+          <div className="space-y-1">
+            {trending.map((t, i) => (
+              <button
+                key={t.tag}
+                onClick={() => searchTrending(t.tag)}
+                className="w-full flex items-center gap-2 p-1.5 rounded-lg hover:bg-accent transition-colors text-left group"
+              >
+                <span className="text-xs font-bold text-muted-foreground w-4">
+                  {i + 1}
+                </span>
+                <Hash className="size-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span className="text-sm font-medium truncate flex-1 group-hover:text-primary transition-colors">
+                  {t.tag}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {t.count} postingan
+                </span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Friend suggestions */}
       <Card className="p-4">

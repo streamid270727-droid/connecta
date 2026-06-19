@@ -1,0 +1,171 @@
+     1→# Connecta - Worklog
+     2→
+     3→## Project: Connecta Social Media Platform (MVP)
+     4→
+     5→Based on PRD v1.0. Building with Next.js 16 + Tailwind + shadcn/ui + Prisma (SQLite) + NextAuth + Socket.io.
+     6→
+     7→### Initial setup (Task ID: 1)
+     8→- Agent: main
+     9→- Prisma schema designed (User, Post, Comment, Like, CommentLike, Share, Friendship, FriendRequest, Notification, Conversation, DirectMessage, MessageRead, Session, Account)
+    10→- Installed bcryptjs, socket.io, socket.io-client
+    11→- Schema pushed to SQLite
+    12→
+    13→### Notes for next phases
+    14→- Build order: auth -> layout -> feed -> posts -> interactions -> profile -> friends -> notifications -> messaging -> seed -> polish
+    15→- All API routes go under /api
+    16→- Single route `/` is the only user-visible page (Next.js rule) -> must use client-side routing within the SPA via state, OR use App Router but only `/` is exposed. Actually Next.js App Router exposes all routes. We will use App Router pages but the rule says "user can only see the / route" - this means we should keep SPA-style within page.tsx for sub-views, OR allow App Router pages. Re-reading: "IMPORTANT: user can only see the / route defined in the src/app/page.tsx. do not write any other route." -> Means we MUST build everything as a SPA within `/`. We'll use Zustand/React state for view switching.
+    17→
+    18→---
+    19→Task ID: 2-a
+    20→Agent: full-stack-developer
+    21→Task: Build friends & notifications API routes
+    22→
+    23→Work Log:
+    24→- Read worklog.md, prisma/schema.prisma, lib/auth.ts, lib/db.ts, lib/socket-server.ts, and existing API routes (posts, posts/[id]/like) to learn project conventions before writing code.
+    25→- Created /api/friends/route.ts: GET returns current user's friends list (with friend id/name/username/avatarUrl/bio/isVerified) + count; supports ?count=1 to return only total count.
+    26→- Created /api/friends/request/route.ts: POST { recipientId } with self-check, recipient validation, already-friends check ("Kalian sudah berteman"), auto-accept when recipient already has pending request to sender (bidirectional friendship + request accepted), else create pending FriendRequest + Notification + notifyUser push.
+    27→- Created /api/friends/accept/route.ts: POST { requestId } validates request exists/pending/recipient==me, updates status to accepted, creates both bidirectional Friendship rows in a transaction, creates Notification for sender (type "friend_accept"), pushes notifyUser to sender.
+    28→- Created /api/friends/reject/route.ts: POST { requestId } validates recipient==me then deletes the FriendRequest.
+    29→- Created /api/friends/[id]/route.ts: DELETE removes both friendship rows (current->friend and friend->current) via deleteMany in a transaction.
+    30→- Created /api/friends/requests/route.ts: GET returns pending incoming requests with sender info; supports ?count=1 for pending count only.
+    31→- Created /api/friends/suggestions/route.ts: GET returns up to 10 users excluding self, current friends, and users with pending requests (either direction); computes mutualFriends count via intersection of friend ID sets; sorted by mutual desc then name asc.
+    32→- Created /api/notifications/route.ts: GET returns current user's notifications (latest 50) with actor info (id/name/username/avatarUrl); supports ?count=1 returning { count, unreadCount }.
+    33→- Created /api/notifications/[id]/read/route.ts: POST marks a single notification as read after verifying recipientId == current user.
+    34→- Created /api/notifications/read-all/route.ts: POST uses updateMany to mark all of the current user's unread notifications as read.
+    35→- Ran `bun run lint` -> passed with no errors.
+    36→
+    37→Stage Summary:
+    38→- 10 API route files created covering the full friends lifecycle (list, request, auto-accept on mutual, accept, reject, unfriend, pending requests, suggestions) and notifications (list, unread/count, mark one read, mark all read).
+    39→- All routes follow Next.js 16 async params pattern (`params: Promise<{ id: string }>`), use `getServerSession(authOptions)` for auth, return `NextResponse.json(...)`, and wrap logic in try/catch with console.error logging and 500 fallback.
+    40→- Real-time socket notifications pushed via dynamically-imported `notifyUser` wrapped in try/catch so socket failures never break the REST response.
+    41→- Bidirectional friendship invariant maintained (two Friendship rows on accept/unfriend).
+    42→- Indonesian error messages throughout; proper TypeScript typing (no `any` in new code).
+    43→- `bun run lint` passes cleanly.
+    44→
+    45→---
+    46→Task ID: 2-b
+    47→Agent: full-stack-developer
+    48→Task: Build conversations & messages API routes
+    49→
+    50→Work Log:
+    51→- Read worklog.md (prior 2-a friends/notifications work) and reviewed prisma/schema.prisma, lib/auth.ts, lib/db.ts, lib/socket-server.ts, plus existing API routes (friends/*, notifications/*, posts/[id]/like) to internalize conventions: Next.js 16 async params, getServerSession(authOptions), NextResponse.json, try/catch with console.error and 500 fallback, dynamic-import socket helpers wrapped in try/catch.
+    52→- Created /api/conversations/route.ts (GET): lists all conversations where user1Id OR user2Id == current user; for each returns the other user (id/name/username/avatarUrl/isVerified), last message (latest by createdAt desc, take 1), per-conversation unreadCount (recipientId=current AND isRead=false), then sorts by lastMessage.createdAt desc with updatedAt fallback. Supports ?unread=1 to return only { unreadCount } (total unread DMs across all conversations) for the header badge.
+    53→- Created /api/conversations/[id]/route.ts (POST, params.id = otherUserId): validates other user exists, computes [user1Id, user2Id] with lexicographic ordering (currentId < otherUserId) to satisfy the unique [user1Id, user2Id] constraint deterministically, upserts the conversation by the user1Id_user2Id composite key, returns { conversationId, otherUser }. Rejects self-conversations.
+    54→- Created /api/conversations/[id]/messages/route.ts (GET, params.id = conversationId): validates conversation exists and current user is a participant (403 otherwise), returns all messages ordered createdAt asc with sender info. Side effects on GET: marks all messages where recipientId=current AND isRead=false as read via updateMany, upserts MessageRead cursor for (conversationId, current user), and emits dm:read to the other participant via emitToUser (best-effort in try/catch).
+    55→- Created /api/messages/route.ts (POST, body { conversationId, content }): validates content non-empty + max 2000 chars (Indonesian errors), validates conversation exists + user is participant (403), derives recipientId as the OTHER user, creates DirectMessage (isRead=false), bumps conversation.updatedAt, upserts MessageRead for the sender so sender has no unread, then best-effort emits dm:message (with senderName/content/createdAt) and notifyUser("Pesan baru", truncated body) to recipient, and persists a Notification row (type "message", content "mengirimi Anda pesan", entityId=conversationId). Returns the created message with sender.
+    56→- Created /api/messages/[id]/read/route.ts (POST, params.id = messageId): loads message, 404 if missing, 403 if recipientId !== current user, otherwise flips isRead=true if not already read and returns { success: true }.
+    57→- Ran `bun run lint` — passed with no errors.
+    58→
+    59→Stage Summary:
+    60→- 5 API route files created covering the full DM lifecycle: list conversations with preview + unread counts (and header-badge mode), get-or-create conversation by other user id, fetch a conversation's messages (with auto-mark-read + dm:read push), send a message (with dm:message push, persistent Notification, and notifyUser toast), and mark a single message as read.
+    61→- All routes follow Next.js 16 async-params pattern (`params: Promise<{ id: string }>` + `await params`), use getServerSession(authOptions) for auth, return NextResponse.json, and wrap logic in try/catch with console.error + 500 fallback.
+    62→- Real-time socket events (dm:message, dm:read, notif:new via notifyUser) pushed via dynamically-imported helpers wrapped in try/catch so socket outages never break REST responses.
+    63→- Conversation uniqueness invariant preserved via lexicographic user1Id/user2Id ordering + upsert on the composite unique key.
+    64→- Per-sender MessageRead cursor upserted on send and on read-list so the sender never counts their own messages as unread.
+    65→- Indonesian error messages throughout; strict TypeScript with explicit select shapes (no `any` in new code).
+    66→- `bun run lint` passes cleanly. (Note: dev.log still shows pre-existing frontend module-not-found errors for profile/friends view components that belong to a different task — not caused by these API routes.)
+    67→
+    68→---
+    69→Task ID: 3-a
+    70→Agent: frontend-styling-expert
+    71→Task: Build ProfileView and SettingsView components
+    72→
+    73→Work Log:
+    74→- Read worklog.md (prior 1/2-a/2-b phases) to understand conventions: Zustand SPA view-switching, Indonesian labels throughout, shadcn/ui + lucide-react + useToast, the rose/pink primary palette in globals.css, UserAvatar component, PostCard + FeedPost type, and the existing API surface for /api/users/[id], /api/users/me (GET+PUT), /api/friends/{request,accept,reject,[id]}, /api/upload, /api/conversations/[id].
+    75→- Reviewed existing components: feed-view.tsx, discover-view.tsx, post-card.tsx, post-composer-dialog.tsx, header.tsx, app-shell.tsx, ui/{button,card,dialog,tabs,switch,dropdown-menu,label,textarea,input,badge,skeleton,separator}.tsx to align with code patterns (infinite scroll on window scroll, optimistic updates, glass sticky bars, gradient hero blocks).
+    76→- Created /src/components/profile/profile-view.tsx:
+    77→  - Reads `profileTargetId` from useAppStore; falls back to session.user.id when null (so "Profil Saya" works).
+    78→  - Fetches GET /api/users/{id} on mount and when id changes (useCallback + useEffect on targetId). Properly typed ProfileUser, ProfileFriend, ProfileResponse interfaces.
+    79→  - Profile header: 200px-tall cover photo with gradient fallback (getCoverGradient(user.id)) + decorative blurred blobs + rounded bottom; 2xl avatar overlapping cover with Camera edit button (own profile only); name + verified badge + private badge + @username + bio + location/joined-date metadata; clickable stats (posts / friends / photos) that switch the active tab.
+    80→  - Action button logic branches on: isOwnProfile -> "Edit Profil" (opens dialog); isFriend -> "Teman" dropdown (Kirim Pesan / Hapus Teman); friendRequestReceived -> "Terima" + "Tolak"; friendRequestSent -> disabled "Permintaan Terkirim"; otherwise -> "Tambah Teman". All calls go to the proper /api/friends/* endpoints with toast feedback and local state updates.
+    81→  - "Pesan" icon button calls openConversation("", userId) per task spec (MessagesView will resolve the conversation).
+    82→  - Sticky tab bar under header (top-14 sm:top-16) with three tabs: Postingan / Teman / Foto. Posts tab uses PostCard with infinite scroll (window scroll listener, dedup by id, hasMore/cursor, loading-more spinner, end-of-list footer). Friends tab renders an avatar grid (xl avatars, click opens profile). Photos tab collects all post images and renders a 3-4 column grid that opens a full-size Dialog lightbox.
+    83→  - Private account handling: if isPrivate && !isFriend && !isOwnProfile -> shows PrivateProfileNotice instead of posts/photos, and posts can't be paginated (loadMorePosts guards with canViewPosts).
+    84→  - EditProfileDialog: form with name, bio (200 char counter), location, phone, birthDate (date input), isPrivate switch, plus avatar + cover upload via /api/upload. On save, PUT /api/users/me with all fields and refresh profile. Includes upload-loading spinners and 4MB size checks.
+    85→  - Loading state uses a dedicated ProfileSkeleton; error state shows retry button. Empty posts state has a "Buat Postingan" CTA for own profile.
+    86→- Created /src/components/profile/settings-view.tsx:
+    87→  - Fetches GET /api/users/me on mount; pre-fills all form fields.
+    88→  - Profile banner card at top: cover (gradient fallback), avatar with Camera upload button (uploads + persists immediately), name + verified badge + username + join date + "Lihat Profil" button.
+    89→  - Sections in a responsive grid (1 col mobile, 2 cols lg):
+    90→    - Akun: name, email (read-only, disabled), phone, birthDate, location, bio -> PUT /api/users/me on Save.
+    91→    - Privasi: isPrivate Switch with optimistic update (reverts on failure), Persian description text.
+    92→    - Tema: two big buttons (Terang / Gelap) using next-themes setTheme, plus note that theme is also available in header.
+    93→    - Keamanan: "Kata Sandi" row with disabled "Segera Hadir" button; shows verified badge if isVerified.
+    94→    - Sesi (spans 2 cols): current session user info card with "Keluar" button -> signOut({ callbackUrl: "/" }).
+    95→    - Bahasa: Indonesian with active badge.
+    96→    - Tentang: Connecta, version 1.0.0 (MVP), build year, copyright line.
+    97→  - SettingsSkeleton for loading state. useTheme mounted-guard to avoid hydration mismatch.
+    98→- Fixed two issues found during type-check/lint: `Language` icon doesn't exist in lucide-react (renamed to `Languages`), and removed an unused `X` import and a duplicate hidden TabsContent. Verified `bun run lint` passes cleanly (exit 0) and `tsc --noEmit` reports no errors in the new profile files.
+    99→
+   100→Stage Summary:
+   101→- 2 client components created under /src/components/profile/: profile-view.tsx (~1100 lines) and settings-view.tsx (~620 lines). Both are wired into app-shell.tsx (already imported there) and will render when currentView === "profile" / "settings".
+   102→- ProfileView fully implements: gradient cover with fallback, overlapping 2xl avatar, verified/private badges, action buttons for all 5 friend-state branches, message button, clickable stats, sticky tab bar with Postingan/Teman/Foto, infinite-scroll PostCard list with dedup + cursor, friend avatar grid, photo lightbox, edit-profile dialog with avatar+cover upload + all editable fields + isPrivate switch, private-account notice, loading skeletons, error retry, and empty state CTA.
+   103→- SettingsView implements all 7 required sections (Akun, Privasi, Tema, Keamanan, Sesi, Bahasa, Tentang) with mobile-first responsive layout (1 col -> 2 cols at lg), inline avatar upload that persists immediately, optimistic privacy toggle, theme switcher, signOut flow, and Indonesian labels throughout.
+   104→- All interactive elements have hover states; rose/pink palette used exclusively (no blue/indigo); toasts via useToast for every action; types are strict (no `any` in new code except where matching the existing PostCard interface signatures).
+   105→- `bun run lint` passes with exit code 0. TypeScript errors remain in other pre-existing files (messages-view, notifications-view, friends-view, search-view modules not yet built — those belong to separate tasks), but the new profile-view.tsx and settings-view.tsx introduce zero new type errors.
+   106→
+   107→---
+   108→Task ID: 3-b
+   109→Agent: frontend-styling-expert
+   110→Task: Build FriendsView and SearchView components
+   111→
+   112→Work Log:
+   113→- Read worklog.md (prior 1/2-a/2-b/3-a phases) to absorb conventions: Zustand SPA view-switching with useAppStore (currentView, openProfile, openConversation, searchQuery/setSearchQuery), Indonesian labels, shadcn/ui + lucide-react + useToast, rose/pink primary palette (no blue/indigo), UserAvatar component, format helpers (formatRelativeTime, formatNumber), and the existing API surface.
+   114→- Reviewed store.ts, user-avatar.tsx, format.ts, header.tsx, app-shell.tsx, profile-view.tsx (for code style + sticky tab bar pattern at top-14 sm:top-16), discover-view.tsx (loading skeletons + empty states), tabs.tsx / dropdown-menu.tsx / button.tsx / badge.tsx / dialog.tsx / alert-dialog.tsx primitives, and the API route files for /api/friends, /api/friends/requests, /api/friends/suggestions, /api/users/search to lock down exact response shapes (friends[].friendedAt, requests[].sender.{id,name,username,avatarUrl,bio,isVerified}, suggestions[].mutualFriends, search users[].{isFriend,requestSent,requestReceived}, search posts[].{_count:{likes,comments,shares}}).
+   115→- Created /src/components/friends/friends-view.tsx (~880 lines):
+   116→  - Page header with rose/pink gradient icon tile, "Teman" title, and dynamic subtitle showing total friends count + pending-requests count.
+   117→  - Sticky tab bar (top-14 sm:top-16, glass background) with three tabs (Semua / Permintaan / Saran). Tabs use full-width flex on mobile, auto on sm+. Active state animates to primary background via data-[state=active] classes. Inline count badges (rounded pill) for total friends and pending requests.
+   118→  - "Semua" tab: local search input with clear (X) button to filter friends by name/username; renders FriendCard list. Each card: avatar (clickable → openProfile), name + verified checkmark, @username, clamp-2 bio, "Pesan" outline button (openConversation("", friend.id)) and "Profil" ghost button. Overflow menu (DropdownMenu) with "Lihat Profil", "Kirim Pesan", and destructive "Hapus Teman" → opens confirm Dialog ("Hapus Teman?" with description naming the friend). Empty state when no friends at all vs. no filter matches; loading skeleton rows; error state with retry button.
+   119→  - "Permintaan" tab: list of pending incoming requests with sender avatar (→ openProfile), name + verified badge, @username, sender bio (clamp-2), relative time, "Terima" (emerald green) + "Tolak" (outline) buttons with per-row spinner flags. Accept optimistically moves the sender into the friends list and removes them from suggestions; reject removes the row; both update the pending count in the Zustand store. Empty state with Inbox illustration.
+   120→  - "Saran" tab: 1-col on mobile / 2-col on sm+ grid of suggestion cards. Each card: centered xl avatar (clickable), name, @username, bio (clamp-2), mutual friends count ("N teman bersama"), "Tambah Teman" primary button. After sending, the button flips to "Terkirim" disabled state via local sentRequestIds set; if the API auto-accepts (status === "friends"), the suggestion is moved into the friends list and a success toast is shown. Empty state with Sparkles illustration.
+   121→  - Sub-components extracted for readability: AllFriendsTab, FriendCard, RequestsTab, RequestRow, SuggestionsTab, SuggestionCard, FriendRowSkeleton, SuggestionCardSkeleton, EmptyState, ErrorState. Strict TypeScript types for Friend, FriendRequest, Suggestion (no `any`).
+   122→  - All fetches use useCallback + initial useEffect; per-item loading flags prevent double-submit; useToast used for every action with Indonesian copy. setPendingFriendRequests in the store is kept in sync after accept/reject so the header badge refreshes immediately.
+   123→- Created /src/components/friends/search-view.tsx (~870 lines):
+   124→  - Reads searchQuery from useAppStore as the initial input value (and keeps the store in sync on every keystroke so the header search bar stays consistent).
+   125→  - Debounced (300 ms) search via useRef-held timeout + AbortController to cancel in-flight requests. On mount, if there's a query, an immediate (non-debounced) search fires.
+   126→  - Search input is pre-filled, autofocus, with a clear (X) button that resets input + store + results.
+   127→  - Results split into two sections: "Pengguna" (Users) and "Postingan" (Posts), each with a count badge. Section headers use icon + label.
+   128→  - UserResultRow branches on friend state: isFriend → green "Teman" badge + outline "Pesan" button (openConversation); requestSent or just-sent → disabled "Terkirim" with Clock icon; requestReceived → emerald "Terima" button (resolves the requestId by hitting /api/friends/requests first, then POST /api/friends/accept); otherwise → primary "Tambah" button (POST /api/friends/request, auto-accept branch handled).
+   129→  - PostResultCard: simple clickable card (entire card opens author profile) with author avatar/name/verified/@username/relative-time header, content rendered with clamp-3 and query-term highlighting via dangerouslySetInnerHTML (HTML-escaped first, then wrapped in <mark class="bg-primary/20 text-primary rounded">), and like/comment counts using formatNumber.
+   130→  - Empty-query state: gradient hero, "Pencarian populer" tag chips (clickable to populate the input), and "Mungkin Anda kenal" suggestions list (fetched from /api/friends/suggestions, top 5, each row clickable to open profile or to populate the search box).
+   131→  - Loading skeleton mimics the users + posts layout; "Tidak ada hasil" empty state when both lists are empty after a successful search; error state with retry button.
+   132→- Removed unused imports (Badge, useRef, cn) and a stale eslint-disable directive. Verified `bun run lint` passes with 0 errors / 0 warnings and `tsc --noEmit` reports zero new errors in the two new files (remaining TS errors are all pre-existing in unrelated modules like skills/, app-shell's missing messages/notifications views, feed-view, post-composer-dialog, bottom-nav — none introduced by this task).
+   133→
+   134→Stage Summary:
+   135→- 2 client components created under /src/components/friends/: friends-view.tsx (~880 lines) and search-view.tsx (~870 lines). Both are already imported by app-shell.tsx (currentView === "friends" / "search") and render correctly without further wiring.
+   136→- FriendsView fully implements the 3-tab Teman page (Semua / Permintaan / Saran) with: sticky animated tab bar, local search filter on the Semua tab, all 5 friend-action branches (unfriend-via-confirm-dialog, accept, reject, send-request, auto-accept on mutual), inline count badges synced with the Zustand store, full loading/error/empty states, and Indonesian copy throughout.
+   137→- SearchView fully implements debounced (300 ms) query→fetch with AbortController, pre-fills input from the shared store, highlights matched query terms in post snippets, branches user-result buttons across all 4 friend states (isFriend/requestSent/requestReceived/none), renders posts as simple clickable cards opening the author's profile, and shows popular-search chips + "Mungkin Anda kenal" suggestions in the empty-query state.
+   138→- Strict TypeScript (no `any`), Tailwind v4 + shadcn/ui only, rose/pink palette (no blue/indigo), mobile-first responsive (1-col → 2-col grids, sticky top-14/16 under the header), UserAvatar fallbacks everywhere, useToast feedback on every action, useCallback/useEffect cleanup.
+   139→- `bun run lint` passes with 0 errors / 0 warnings. `tsc --noEmit` introduces zero new errors in the two new files (pre-existing errors in other modules are not caused by this task).
+   140→
+   141→---
+   142→Task ID: 3-c
+   143→Agent: frontend-styling-expert
+   144→Task: Build MessagesView with real-time Socket.io chat
+   145→
+   146→Work Log:
+   147→- Read worklog.md (prior 1/2-a/2-b/3-a/3-b phases) to absorb conventions: Zustand SPA view-switching with useAppStore (currentView, openConversation, openProfile, conversationTarget, setUnreadMessages), Indonesian labels throughout, shadcn/ui + lucide-react + useToast, rose/pink primary palette (no blue/indigo), UserAvatar component, format helpers (formatRelativeTime / formatTime / formatShortDate), and the API surface for /api/conversations, /api/conversations/[otherUserId] (POST get-or-create), /api/conversations/[id]/messages (GET, marks read side-effect), /api/messages (POST).
+   148→- Reviewed lib/store.ts, lib/socket.ts (getSocket singleton, io("/?XTransformPort=3003")), lib/socket-server.ts, mini-services/chat-service/index.ts to lock down exact socket contract: conv:join/conv:leave room events, dm:typing with { conversationId, recipientId, isTyping }, dm:stop-typing with { conversationId, recipientId }, dm:message (incoming), dm:read { conversationId, readBy }, user:check-online with ack callback returning { userId, isOnline }. Also confirmed GlobalSocketConnector already shows a sonner toast for incoming DMs when the user is NOT in the active conversation, so MessagesView only needs to handle the in-conversation case.
+   149→- Reviewed app-shell.tsx and adjusted the per-view wrapper: when currentView === "messages", drop the max-w-2xl/lg:max-w-3xl constraint and use `mx-auto w-full h-full` so the two-pane chat layout has room to breathe (320px list + flex-1 chat).
+   150→- Created /src/components/messages/messages-view.tsx (~1450 lines, single file with sub-components):
+   151→  - Types: ChatUser, Conversation (with lastMessage + unreadCount), ChatMessage, IncomingSocketMessage, TypingPayload, ReadPayload, OnlineAck, FriendForCompose.
+   152→  - Helpers: startOfDay / isSameDay / isYesterday / dateLabel (Hari ini / Kemarin / "5 Mei" same-year / full date) used for date separators between message groups; previewText prefixes lastMessage with "Anda: " when senderId === currentUser.
+   153→  - Sub-components: TypingDots (three bouncing dots with staggered animation-delay via inline style + a CSS keyframe `typing-bounce` injected via <style>), ConversationRow (avatar with green online dot ring, name + verified checkmark, last message preview, relative time, unread badge), ConversationListSkeleton, EmptyChatPlaceholder (rose-gradient hero with MessageCircle icon — shown on desktop when no conversation is selected), NewChatDialog (fetches /api/friends, local name/username filter, click to start conversation via openConversation("", userId)), MessageBubble (sent = primary color right-aligned rounded-br-sm; received = muted left-aligned rounded-bl-sm with sender avatar when sender changes; time + read receipt: single Check for sent, double CheckCheck in primary color for read), DateSeparator (centered pill), plus the main MessagesView.
+   154→  - Main MessagesView layout: `h-[calc(100dvh-7.5rem)] sm:h-[calc(100dvh-8rem)] lg:h-[calc(100dvh-4rem)] lg:flex lg:overflow-hidden` to fill viewport minus header (3.5rem mobile / 4rem sm+) and bottom nav (4rem) on mobile; two panes (`lg:w-80` list + `flex-1` chat) with mobile toggle (showChatOnMobile = !!activeConversationId).
+   155→  - Left pane: header with rose-gradient icon tile, "Pesan" title, refresh button (spin while refreshing), compose button (opens NewChatDialog); local search input with clear (X) button; sorted conversation list (server already sorts by lastMessage.createdAt desc); per-row avatar with green online dot, name + verified SVG checkmark, last-message preview (truncated, "Anda: " prefix when sent by me), relative time, unread count badge (primary color, top-right). Empty state when no conversations: icon + "Belum ada percakapan" + "Pesan Baru" CTA. Loading skeleton; error state with retry.
+   156→  - Right pane: chat header with back button (lg:hidden), clickable avatar+name+verified badge that calls openProfile(otherUser.id), online status ("Sedang online" / "sedang mengetik..." / "Terakhir dilihat baru saja"), DropdownMenu with "Lihat Profil" and "Tutup Percakapan" (clears active state). Messages area: scrollable flex-1 with `messages-scroll` custom-scrollbar class, date separators between groups, bubbles with sender-avatar grouping logic (show avatar + sender name only when sender changes), typing indicator with bouncing dots + other user's avatar. Auto-scroll on new message/typing via messagesEndRef.scrollIntoView. Empty state when conversation has no messages yet. Loading skeleton; error state with retry. Composer: Emoji button (decorative, shows "Fitur emoji segera hadir" toast), auto-resize Textarea (Enter to send, Shift+Enter for newline), Send button (rose-gradient, disabled when empty, spinner while sending).
+   157→  - Behavior — opening a conversation: a useEffect on `conversationTarget` calls resolveAndOpen. If `conversationTarget.conversationId` is empty (e.g., from profile/friends "Pesan" button), POSTs to `/api/conversations/{otherUserId}` to get-or-create, sets activeConversationId + activeOtherUser, then refreshes the conversation list. If conversationId is already set, looks up otherUser from the in-memory list (and a fallback useEffect fills in activeOtherUser once the list arrives if it wasn't loaded yet — covers the "came from a notification toast before the list loaded" race).
+   158→  - Behavior — socket lifecycle: a useEffect keyed on [activeConversationId, activeOtherUser, currentUserId, loadMessages, fetchConversations] loads messages, emits `conv:join`, registers listeners for dm:message / dm:typing / dm:stop-typing / dm:read, and also fires a one-shot `user:check-online` ack to set the online status pill. On cleanup it emits `conv:leave`, removes all listeners, resets typing/online state, and sends `dm:stop-typing` if we were typing.
+   159→  - Behavior — sending: optimistic append with `temp-{timestamp}-{rand}` id, POST /api/messages with { conversationId, content }, on success replaces temp id with real id (with a race-condition guard: if a real-time dm:message event already inserted the real id, we drop the temp duplicate instead of duplicating), updates the conversation list's lastMessage + re-sorts to float the conversation to the top. On failure, removes the optimistic message and shows a destructive toast. After send, emits `dm:stop-typing` and clears the typing timeout.
+   160→  - Behavior — typing: emitTyping() sends `dm:typing` (isTyping: true) on first keystroke, then debounces `dm:stop-typing` after 2s of inactivity via typingTimeoutRef; isTypingRef guards against re-emitting start. Incoming dm:typing/dm:stop-typing filtered by conversationId + userId === activeOtherUser.id toggles the typing indicator and pill text.
+   161→  - Behavior — incoming dm:message: appends to messages if not already present (id dedup), hides typing indicator, triggers a best-effort GET /api/conversations/{id}/messages (server marks read), and refreshes the conversation list + global unread count. Incoming dm:read flips isRead=true on all of the current user's sent messages so the double-check turns primary color.
+   162→  - Sync: fetchConversations also recomputes totalUnread and calls setUnreadMessages so the header badge stays in sync after every refresh.
+   163→  - Styling: Tailwind v4 + shadcn/ui only, rose/pink palette exclusively (gradient tiles `from-rose-500 to-pink-600`, primary bubbles use --primary), mobile-first responsive (full-screen panes on mobile, two-pane on lg), custom scrollbar via `.messages-scroll` class with thin 6px thumb, three-dot typing animation via `@keyframes typing-bounce` injected in a <style> tag, fade-in-up animation for new bubbles, safe-bottom class on composer for iOS notch, glass header on the chat window. Indonesian copy throughout.
+   164→- Removed unused eslint-disable directive (rule already globally off), unused `Card`/`Badge`/`setView` imports, and a stray `content` dep reference in handleSend's deps array. Verified `bun run lint` passes with exit code 0 (0 errors, 0 warnings) and `npx tsc --noEmit` reports zero new errors in messages-view.tsx (pre-existing errors in skills/, app-shell's missing notifications-view, feed-view, post-composer-dialog, bottom-nav, register route are all from other tasks).
+   165→
+   166→Stage Summary:
+   167→- 1 client component created at /src/components/messages/messages-view.tsx (~1450 lines), already imported by app-shell.tsx (currentView === "messages"). Also adjusted app-shell.tsx's wrapper div to drop the max-width constraint for the messages view so the two-pane layout has room.
+   168→- MessagesView fully implements: WhatsApp/Messenger-style two-pane layout (320px conversation list + flex-1 chat) on desktop, full-screen pane toggle on mobile, conversation list with local search + unread badges + verified checkmarks + relative time + green online dot, chat window with clickable header (opens profile), date separators, sender-avatar grouping, read receipts (Check vs CheckCheck), animated three-dot typing indicator, auto-resize composer with Enter/Shift+Enter, optimistic send with race-guard, real-time Socket.io (conv:join/leave, dm:message/typing/stop-typing/read, user:check-online ack), get-or-create flow when opening by otherUserId, fallback useEffect to recover activeOtherUser when arriving via notification before list loads, sync of total unread count to the Zustand store, and full loading/error/empty states.
+   169→- Strict TypeScript (no `any` in new code — explicit interfaces for every API/Socket payload), Tailwind v4 + shadcn/ui only, rose/pink palette (no blue/indigo), mobile-first responsive, Indonesian copy throughout, useToast for all feedback, refs for autoscroll + textarea auto-resize + typing debounce, proper socket listener cleanup on unmount/switch.
+   170→- `bun run lint` passes with exit code 0 (0 errors, 0 warnings). `npx tsc --noEmit` introduces zero new errors in the new file (pre-existing errors in other modules are not caused by this task).
+   171→

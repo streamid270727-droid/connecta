@@ -1,0 +1,257 @@
+// Connecta - Social Media Platform Schema
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  username      String    @unique
+  name          String
+  password      String
+  bio           String?
+  avatarUrl     String?
+  coverUrl      String?
+  birthDate     DateTime?
+  location      String?
+  phone         String?
+  isPrivate     Boolean   @default(false)
+  isVerified    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  posts              Post[]
+  comments           Comment[]
+  likes              Like[]
+  commentLikes       CommentLike[]
+  shares             Share[]
+  notifications      Notification[]      @relation("NotificationRecipient")
+  notificationsFrom  Notification[]      @relation("NotificationActor")
+  sentMessages       DirectMessage[]     @relation("MessageSender")
+  receivedMessages   DirectMessage[]     @relation("MessageRecipient")
+  conversations1     Conversation[]      @relation("ConversationUser1")
+  conversations2     Conversation[]      @relation("ConversationUser2")
+  messageReads       MessageRead[]
+
+  // Friend relations (self-referencing many-to-many)
+  friendsOf          Friendship[]        @relation("FriendshipUser")
+  friendsWith        Friendship[]        @relation("FriendshipFriend")
+  friendRequestsSent FriendRequest[]     @relation("FriendRequestSender")
+  friendRequestsRecv FriendRequest[]     @relation("FriendRequestRecipient")
+
+  // Session
+  sessions           Session[]
+  accounts           Account[]
+
+  @@index([username])
+  @@index([email])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  providerType      String
+  providerId        String
+  providerAccountId String
+  refreshToken      String?
+  accessToken       String?
+  accessTokenExpires DateTime?
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Post {
+  id          String   @id @default(cuid())
+  content     String
+  images      String?  // JSON-encoded array of image URLs
+  videoUrl    String?  // YouTube/Vimeo embed URL
+  linkPreview String?  // JSON-encoded link preview metadata
+  authorId    String
+  sharedFromId String? // For shared posts
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  likes       Like[]
+  shares      Share[]
+  sharedFrom  Post?     @relation("SharedPost", fields: [sharedFromId], references: [id], onDelete: SetNull)
+  sharedBy    Post[]    @relation("SharedPost")
+
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  postId    String
+  authorId  String
+  parentId  String?  // For 1-level replies
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent    Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[] @relation("CommentReplies")
+  likes     CommentLike[]
+
+  @@index([postId])
+  @@index([authorId])
+  @@index([parentId])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model CommentLike {
+  id        String   @id @default(cuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+}
+
+model Share {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model Friendship {
+  id         String   @id @default(cuid())
+  userId     String
+  friendId   String
+  createdAt  DateTime @default(now())
+
+  user       User     @relation("FriendshipUser", fields: [userId], references: [id], onDelete: Cascade)
+  friend     User     @relation("FriendshipFriend", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([userId])
+  @@index([friendId])
+}
+
+model FriendRequest {
+  id          String   @id @default(cuid())
+  senderId    String
+  recipientId String
+  status      String   @default("pending") // pending | accepted | rejected
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sender      User     @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User     @relation("FriendRequestRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, recipientId])
+  @@index([recipientId])
+  @@index([senderId])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  recipientId String
+  actorId     String?
+  type        String   // friend_request | friend_accept | like | comment | message | share | reply
+  entityId    String?  // Post/Comment/Message ID
+  content     String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  recipient   User     @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User?    @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId])
+  @@index([createdAt])
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  user1Id   String
+  user2Id   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user1     User     @relation("ConversationUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2     User     @relation("ConversationUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+  messages  DirectMessage[]
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+}
+
+model DirectMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  senderId        String
+  recipientId     String
+  content         String
+  isRead          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender          User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient       User     @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([createdAt])
+}
+
+model MessageRead {
+  id              String   @id @default(cuid())
+  conversationId  String
+  userId          String
+  lastReadAt      DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}

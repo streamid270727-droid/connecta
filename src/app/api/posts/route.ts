@@ -3,6 +3,17 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { parseImages } from "@/lib/format"
+import { z } from "zod"
+
+const createPostSchema = z.object({
+  content: z.string().max(5000, "Konten terlalu panjang (maks 5000 karakter)").optional(),
+  images: z.array(z.string()).max(4, "Maksimal 4 gambar per postingan").optional(),
+  videoUrl: z.string().optional().nullable(),
+  sharedFromId: z.string().optional().nullable(),
+}).refine(
+  (data) => data.content || data.images?.length || data.videoUrl || data.sharedFromId,
+  { message: "Postingan tidak boleh kosong" }
+)
 
 export async function GET(request: Request) {
   try {
@@ -14,7 +25,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const cursor = searchParams.get("cursor")
     const limit = Math.min(parseInt(searchParams.get("limit") || "10"), 20)
-    const scope = searchParams.get("scope") || "friends" // friends | discover
+    const scope = searchParams.get("scope") || "all" // all | friends | discover
 
     // Get user's friends
     const friendships = await db.friendship.findMany({
@@ -49,7 +60,7 @@ export async function GET(request: Request) {
         },
         likes: {
           where: { userId: session.user.id },
-          select: { id: true },
+          select: { id: true, emoji: true },
         },
         shares: {
           where: { userId: session.user.id },
@@ -88,6 +99,7 @@ export async function GET(request: Request) {
         createdAt: p.createdAt,
         author: p.author,
         liked: p.likes.length > 0,
+        emoji: p.likes[0]?.emoji || null,
         shared: p.shares.length > 0,
         saved: p.savedBy.length > 0,
         _count: p._count,
@@ -118,28 +130,16 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { content, images, videoUrl, sharedFromId } = body
+    const parsed = createPostSchema.safeParse(body)
 
-    if (!content && !images?.length && !videoUrl && !sharedFromId) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Postingan tidak boleh kosong" },
+        { error: parsed.error.issues[0].message },
         { status: 400 }
       )
     }
 
-    if (content && content.length > 5000) {
-      return NextResponse.json(
-        { error: "Konten terlalu panjang (maks 5000 karakter)" },
-        { status: 400 }
-      )
-    }
-
-    if (images && (!Array.isArray(images) || images.length > 4)) {
-      return NextResponse.json(
-        { error: "Maksimal 4 gambar per postingan" },
-        { status: 400 }
-      )
-    }
+    const { content, images, videoUrl, sharedFromId } = parsed.data
 
     const post = await db.post.create({
       data: {

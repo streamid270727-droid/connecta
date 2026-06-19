@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Mail, Lock, User, AtSign, Sparkles, Heart, Users, MessageCircle, Shield, Zap } from "lucide-react"
+import { Loader2, Mail, Lock, User, AtSign, Heart, Users, MessageCircle, Shield, Zap } from "lucide-react"
 import { toast } from "sonner"
 
 export function AuthScreen() {
@@ -104,18 +104,10 @@ export function AuthScreen() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-background">
       {/* Left: Brand showcase */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-rose-500 via-pink-600 to-purple-700">
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-10 left-10 w-72 h-72 bg-white/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-10 right-10 w-96 h-96 bg-amber-300/20 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-fuchsia-300/20 rounded-full blur-3xl" />
-        </div>
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-primary">
         <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20 text-white">
           <div className="flex items-center gap-3 mb-8">
-            <div className="size-14 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/30">
-              <Sparkles className="size-8" />
-            </div>
-            <span className="text-4xl font-bold tracking-tight">Connecta</span>
+            <span className="text-4xl font-bold tracking-tight">Conne<span className="text-primary-foreground/60">cta</span></span>
           </div>
           <h1 className="text-4xl xl:text-5xl font-bold leading-tight mb-4">
             Terhubung, Berbagi,
@@ -157,17 +149,14 @@ export function AuthScreen() {
         <div className="w-full max-w-md">
           {/* Mobile brand */}
           <div className="lg:hidden flex flex-col items-center mb-8">
-            <div className="size-16 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center mb-3 shadow-lg shadow-rose-500/30">
-              <Sparkles className="size-9 text-white" />
-            </div>
-            <span className="text-3xl font-bold tracking-tight">Connecta</span>
+            <span className="text-3xl font-bold tracking-tight">Conne<span className="text-primary">cta</span></span>
             <p className="text-sm text-muted-foreground mt-1">
               Terhubung, Berbagi, Berkembang
             </p>
           </div>
 
           <div className="mb-6">
-            <h2 className="text-2xl font-bold">Selamat datang</h2>
+            <h2 className="text-2xl font-bold text-foreground">Selamat datang</h2>
             <p className="text-sm text-muted-foreground mt-1">
               Masuk atau buat akun untuk mulai terhubung.
             </p>
@@ -215,7 +204,7 @@ export function AuthScreen() {
                 </div>
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full text-white"
                   disabled={loading !== null}
                 >
                   {loading === "login" ? (
@@ -309,7 +298,7 @@ export function AuthScreen() {
                 </div>
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full text-white"
                   disabled={loading !== null}
                 >
                   {loading === "register" ? (

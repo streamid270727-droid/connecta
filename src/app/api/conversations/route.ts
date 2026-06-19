@@ -71,23 +71,34 @@ export async function GET(request: Request) {
         const isUser1 = c.user1Id === session.user.id
         const otherUser = isUser1 ? c.user2 : c.user1
         const lastMessage = c.messages[0] ?? null
-        const unreadCount = await db.directMessage.count({
-          where: {
-            conversationId: c.id,
-            recipientId: session.user.id,
-            isRead: false,
-          },
-        })
         return {
           id: c.id,
           otherUser,
           lastMessage,
-          unreadCount,
+          unreadCount: 0,
           updatedAt: c.updatedAt,
           createdAt: c.createdAt,
         }
       })
     )
+
+    // Batch fetch unread counts for all conversations in a single query
+    const conversationIds = data.map((c) => c.id)
+    const unreadRows = await db.directMessage.groupBy({
+      by: ["conversationId"],
+      where: {
+        conversationId: { in: conversationIds },
+        recipientId: session.user.id,
+        isRead: false,
+      },
+      _count: { id: true },
+    })
+    const unreadMap = new Map(
+      unreadRows.map((r) => [r.conversationId, r._count.id])
+    )
+    for (const c of data) {
+      c.unreadCount = unreadMap.get(c.id) ?? 0
+    }
 
     // Sort by last message time desc (fallback to updatedAt when no messages)
     data.sort((a, b) => {

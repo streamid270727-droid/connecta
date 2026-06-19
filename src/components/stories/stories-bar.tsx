@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useSession } from "next-auth/react"
-import { Plus, Loader2, Camera, X, Send, Eye } from "lucide-react"
+import { Plus, Loader2, Camera, X, Send, Eye, Smile } from "lucide-react"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -237,7 +237,10 @@ function StoryComposer({
   const [gradient, setGradient] = useState(STORY_GRADIENTS[0])
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [showEmojis, setShowEmojis] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const QUICK_EMOJIS = ["😀", "😂", "😍", "🥳", "😎", "🤔", "😢", "🔥", "✨", "❤️", "👍", "🎉", "💯", "🙏", "😭", "🥰", "👀", "💪", "🌟", "😊"]
 
   const reset = () => {
     setContent("")
@@ -369,6 +372,32 @@ function StoryComposer({
                 className="resize-none"
                 rows={2}
               />
+              {/* Emoji row */}
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0"
+                  onClick={() => setShowEmojis((o) => !o)}
+                  type="button"
+                >
+                  <Smile className="size-4 text-muted-foreground" />
+                </Button>
+                {showEmojis && (
+                  <div className="flex flex-wrap gap-1">
+                    {QUICK_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => setContent((c) => c + emoji)}
+                        className="size-8 flex items-center justify-center text-lg hover:bg-accent rounded-lg transition-colors"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {STORY_GRADIENTS.map((g) => (
                   <button

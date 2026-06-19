@@ -42,7 +42,11 @@ model User {
   messageReads       MessageRead[]
   stories            Story[]
   storyViews         StoryView[]
+  storyReactions     StoryReaction[]
+  storyReplies       StoryReply[]
   savedPosts         SavedPost[]
+  blockedUsers       BlockedUser[]  @relation("Blocker")
+  blockedBy          BlockedUser[]  @relation("Blocked")
 
   // Friend relations (self-referencing many-to-many)
   friendsOf          Friendship[]        @relation("FriendshipUser")
@@ -130,6 +134,7 @@ model Like {
   id        String   @id @default(cuid())
   postId    String
   userId    String
+  emoji     String?  // null = plain like, "❤️" "😂" "😮" "😢" "👍" = reaction
   createdAt DateTime @default(now())
 
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -273,6 +278,8 @@ model Story {
 
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   views     StoryView[]
+  reactions StoryReaction[]
+  replies   StoryReply[]
 
   @@index([authorId])
   @@index([expiresAt])
@@ -292,6 +299,34 @@ model StoryView {
   @@index([userId])
 }
 
+model StoryReaction {
+  id        String   @id @default(cuid())
+  storyId   String
+  userId    String
+  emoji     String   // e.g. "❤️", "😂", "😮", "😢", "👍"
+  createdAt DateTime @default(now())
+
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+  @@index([storyId])
+}
+
+model StoryReply {
+  id        String   @id @default(cuid())
+  storyId   String
+  senderId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([storyId])
+  @@index([senderId])
+}
+
 // Saved/bookmarked posts
 model SavedPost {
   id        String   @id @default(cuid())
@@ -304,5 +339,19 @@ model SavedPost {
 
   @@unique([postId, userId])
   @@index([userId])
+}
+
+model BlockedUser {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
 }
 

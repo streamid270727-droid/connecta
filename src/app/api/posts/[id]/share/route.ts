@@ -75,7 +75,19 @@ export async function POST(
       } catch {}
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      sharedPost: {
+        id: sharedPost.id,
+        content: sharedPost.content,
+        images: sharedPost.images,
+        videoUrl: sharedPost.videoUrl,
+        createdAt: sharedPost.createdAt,
+        author: sharedPost.author,
+        _count: sharedPost._count,
+        sharedFromId: id,
+      },
+    })
   } catch (error) {
     console.error("POST /api/posts/[id]/share error:", error)
     return NextResponse.json({ error: "Server error" }, { status: 500 })

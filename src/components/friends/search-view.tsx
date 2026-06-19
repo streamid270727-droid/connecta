@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
 import { formatRelativeTime, formatNumber } from "@/lib/format"
 import {
   Search as SearchIcon,
@@ -24,10 +25,11 @@ import {
   UserPlus,
   UserCheck,
   Clock,
-  Sparkles,
   TrendingUp,
   CheckCircle2,
 } from "lucide-react"
+
+type FilterTab = "all" | "people" | "posts"
 
 // ===== Types =====
 interface SearchUser {
@@ -92,6 +94,7 @@ export function SearchView() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
+  const [activeTab, setActiveTab] = useState<FilterTab>("all")
 
   // Per-row action flags
   const [requestingId, setRequestingId] = useState<string | null>(null)
@@ -348,6 +351,38 @@ export function SearchView() {
             </button>
           )}
         </div>
+
+        {/* Filter tabs */}
+        {hasSearched && (
+          <div className="flex gap-1 mt-3 p-1 bg-muted/60 rounded-xl">
+            {[
+              { value: "all" as const, label: "Semua", count: results.users.length + results.posts.length },
+              { value: "people" as const, label: "Pengguna", count: results.users.length },
+              { value: "posts" as const, label: "Postingan", count: results.posts.length },
+            ].map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-all",
+                  activeTab === tab.value
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab.label}
+                {tab.count > 0 && (
+                  <span className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded-full",
+                    activeTab === tab.value ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                  )}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ===== Body ===== */}
@@ -384,69 +419,69 @@ export function SearchView() {
         ) : (
           <div className="space-y-6">
             {/* ===== Users ===== */}
-            <section>
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <Users className="size-4 text-muted-foreground" />
-                <h2 className="text-sm font-semibold">Pengguna</h2>
-                {results.users.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    {results.users.length}
-                  </Badge>
-                )}
-              </div>
-
-              {results.users.length === 0 ? (
-                <p className="text-xs text-muted-foreground px-1">
-                  Tidak ada pengguna yang cocok.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {results.users.map((user) => (
-                    <UserResultRow
-                      key={user.id}
-                      user={user}
-                      sent={sentIds.has(user.id)}
-                      loading={requestingId === user.id}
-                      onSendRequest={() => handleSendRequest(user.id)}
-                      onAcceptRequest={() => handleAcceptRequest(user.id)}
-                      onViewProfile={() => openProfile(user.id)}
-                      onMessage={() => openConversation("", user.id)}
-                    />
-                  ))}
+            {(activeTab === "all" || activeTab === "people") && (
+              <section>
+                <div className="flex items-center gap-2 mb-3 px-1">
+                  <Users className="size-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold">Pengguna</h2>
+                  {results.users.length > 0 && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {results.users.length}
+                    </Badge>
+                  )}
                 </div>
-              )}
-            </section>
+
+                {results.users.length === 0 ? (
+                  <p className="text-xs text-muted-foreground px-1">
+                    Tidak ada pengguna yang cocok.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {results.users.map((user) => (
+                      <UserResultRow
+                        key={user.id}
+                        user={user}
+                        sent={sentIds.has(user.id)}
+                        loading={requestingId === user.id}
+                        onSendRequest={() => handleSendRequest(user.id)}
+                        onAcceptRequest={() => handleAcceptRequest(user.id)}
+                        onViewProfile={() => openProfile(user.id)}
+                        onMessage={() => openConversation("", user.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
             {/* ===== Posts ===== */}
-            {results.posts.length > 0 && <Separator className="my-2" />}
-            <section>
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <FileText className="size-4 text-muted-foreground" />
-                <h2 className="text-sm font-semibold">Postingan</h2>
-                {results.posts.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    {results.posts.length}
-                  </Badge>
-                )}
-              </div>
+            {(activeTab === "all" || activeTab === "posts") && results.posts.length > 0 && (
+              <>
+                {activeTab === "all" && results.users.length > 0 && <Separator className="my-2" />}
+                <section>
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <FileText className="size-4 text-muted-foreground" />
+                    <h2 className="text-sm font-semibold">Postingan</h2>
+                    {results.posts.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {results.posts.length}
+                      </Badge>
+                    )}
+                  </div>
 
-              {results.posts.length === 0 ? (
-                <p className="text-xs text-muted-foreground px-1">
-                  Tidak ada postingan yang cocok.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {results.posts.map((post) => (
-                    <PostResultCard
-                      key={post.id}
-                      post={post}
-                      query={trimmedQuery}
-                      onViewAuthor={() => openProfile(post.author.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+                  <div className="space-y-2">
+                    {results.posts.map((post) => (
+                      <PostResultCard
+                        key={post.id}
+                        post={post}
+                        query={trimmedQuery}
+                        onViewAuthor={() => openProfile(post.author.id)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -701,7 +736,7 @@ function EmptyQueryState({
       {/* Suggestions (people you may know) */}
       <div>
         <div className="flex items-center gap-2 mb-3 px-1">
-          <Sparkles className="size-4 text-primary" />
+          <TrendingUp className="size-4 text-primary" />
           <h3 className="text-sm font-semibold">Mungkin Anda kenal</h3>
         </div>
 

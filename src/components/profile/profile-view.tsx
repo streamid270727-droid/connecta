@@ -56,6 +56,7 @@ import {
   AlertCircle,
   Clock,
   Heart,
+  Ban,
 } from "lucide-react"
 
 interface ProfileUser {
@@ -116,6 +117,10 @@ export function ProfileView() {
   // Friend action loading flags
   const [friendActionLoading, setFriendActionLoading] = useState(false)
   const [photoLightbox, setPhotoLightbox] = useState<string | null>(null)
+  const [allPhotos, setAllPhotos] = useState<string[]>([])
+  const [loadingPhotos, setLoadingPhotos] = useState(false)
+  const [blocked, setBlocked] = useState(false)
+  const [blocking, setBlocking] = useState(false)
 
   const [editOpen, setEditOpen] = useState(false)
 
@@ -193,6 +198,30 @@ export function ProfileView() {
     window.addEventListener("scroll", handler, { passive: true })
     return () => window.removeEventListener("scroll", handler)
   }, [hasMore, loadingMore, loading, loadMorePosts])
+
+  // ----- Fetch all photos -----
+  const fetchPhotos = useCallback(async () => {
+    if (!targetId) return
+    setLoadingPhotos(true)
+    try {
+      const res = await fetch(`/api/users/${targetId}/photos`)
+      if (res.ok) {
+        const data = await res.json()
+        setAllPhotos(data.photos || [])
+      }
+    } catch {
+      // Silent fail — photos will show empty
+    } finally {
+      setLoadingPhotos(false)
+    }
+  }, [targetId])
+
+  // Fetch photos on profile load
+  useEffect(() => {
+    if (targetId && !loading) {
+      fetchPhotos()
+    }
+  }, [targetId, loading, fetchPhotos])
 
   // ----- Local post update/delete handlers -----
   const handlePostUpdate = useCallback((id: string, updates: Partial<FeedPost>) => {
@@ -334,14 +363,30 @@ export function ProfileView() {
     openConversation("", user.id)
   }
 
+  const handleBlock = async () => {
+    if (!user || blocking) return
+    setBlocking(true)
+    try {
+      const res = await fetch("/api/friends/block", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setBlocked(data.blocked)
+        toast({
+          title: data.blocked ? "Diblokir" : "Dibuka blokirannya",
+          description: data.blocked
+            ? `${user.name} tidak akan bisa melihat profil Anda`
+            : `${user.name} telah dibuka blokirannya`,
+        })
+      }
+    } catch {}
+    setBlocking(false)
+  }
+
   // ----- Photo grid (all images from posts) -----
-  const photos = useMemo(() => {
-    const out: string[] = []
-    for (const p of posts) {
-      if (p.images?.length) out.push(...p.images)
-    }
-    return out
-  }, [posts])
 
   // ----- Render -----
   if (loading) {
@@ -364,7 +409,7 @@ export function ProfileView() {
   }
 
   const canViewPosts = !user.isPrivate || user.isFriend || user.isOwnProfile
-  const photosCount = photos.length
+  const photosCount = allPhotos.length
 
   return (
     <div className="min-h-screen pb-8">
@@ -448,6 +493,14 @@ export function ProfileView() {
                     >
                       <UserPlus className="size-4 rotate-180" />
                       Hapus Teman
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={handleBlock}
+                      disabled={blocking}
+                    >
+                      <Ban className="size-4" />
+                      {blocking ? "Memblokir..." : "Blokir"}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -676,7 +729,13 @@ export function ProfileView() {
           <TabsContent value="photos" className="mt-3">
             {!canViewPosts ? (
               <PrivateProfileNotice />
-            ) : photos.length === 0 ? (
+            ) : loadingPhotos ? (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-2 animate-pulse">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="aspect-square rounded-md bg-muted" />
+                ))}
+              </div>
+            ) : allPhotos.length === 0 ? (
               <div className="text-center py-12">
                 <ImageIcon className="size-10 mx-auto mb-2 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">
@@ -687,7 +746,7 @@ export function ProfileView() {
               </div>
             ) : (
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 sm:gap-2">
-                {photos.map((url, i) => (
+                {allPhotos.map((url, i) => (
                   <button
                     key={`${url}-${i}`}
                     onClick={() => setPhotoLightbox(url)}
@@ -770,20 +829,20 @@ function SavedPostsTab() {
 
   useEffect(() => {
     void load()
-  }, [])
 
-  const load = async () => {
-    try {
-      const res = await fetch("/api/posts/saved")
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      setPosts(data.posts || [])
-    } catch {
-      toast({ title: "Gagal memuat simpanan", variant: "destructive" })
-    } finally {
-      setLoading(false)
+    async function load() {
+      try {
+        const res = await fetch("/api/posts/saved")
+        if (!res.ok) throw new Error()
+        const data = await res.json()
+        setPosts(data.posts || [])
+      } catch {
+        toast({ title: "Gagal memuat simpanan", variant: "destructive" })
+      } finally {
+        setLoading(false)
+      }
     }
-  }
+  }, [])
 
   const handleUnsave = async (postId: string) => {
     setRemovedIds((prev) => new Set(prev).add(postId))

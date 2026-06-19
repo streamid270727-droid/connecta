@@ -21,7 +21,17 @@ import { GlobalSocketConnector } from "@/components/common/global-socket-connect
 
 export function AppShell() {
   const { data: session, status } = useSession()
-  const { currentView } = useAppStore()
+  const { currentView, setUserProfile } = useAppStore()
+
+  // Initialize userProfile from session
+  useEffect(() => {
+    if (session?.user) {
+      setUserProfile({
+        avatarUrl: session.user.image ?? null,
+        name: session.user.name ?? null,
+      })
+    }
+  }, [session, setUserProfile])
 
   // Periodically refresh unread counts
   useEffect(() => {
@@ -68,7 +78,7 @@ export function AppShell() {
             {currentView === "settings" && <SettingsView />}
           </div>
         </main>
-        <RightSidebar />
+        {currentView !== "messages" && <RightSidebar />}
       </div>
       <BottomNav />
       <PostComposerDialog />

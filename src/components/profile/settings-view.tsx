@@ -54,9 +54,9 @@ interface SettingsUser {
 }
 
 export function SettingsView() {
-  const { data: session } = useSession()
+  const { data: session, update: updateSession } = useSession()
   const { theme, setTheme } = useTheme()
-  const { openProfile } = useAppStore()
+  const { openProfile, setUserProfile } = useAppStore()
   const { toast } = useToast()
 
   const [user, setUser] = useState<SettingsUser | null>(null)
@@ -75,6 +75,7 @@ export function SettingsView() {
   const [savingAccount, setSavingAccount] = useState(false)
   const [savingPrivacy, setSavingPrivacy] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [uploadingCover, setUploadingCover] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -82,29 +83,29 @@ export function SettingsView() {
 
   useEffect(() => {
     void loadUser()
-  }, [])
 
-  const loadUser = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch("/api/users/me")
-      if (!res.ok) throw new Error("Gagal memuat pengguna")
-      const data = await res.json()
-      const u: SettingsUser = data.user
-      setUser(u)
-      setName(u.name || "")
-      setPhone(u.phone || "")
-      setBirthDate(u.birthDate ? u.birthDate.slice(0, 10) : "")
-      setLocation(u.location || "")
-      setBio(u.bio || "")
-      setIsPrivate(u.isPrivate)
-      setAvatarUrl(u.avatarUrl || "")
-    } catch {
-      toast({ title: "Gagal memuat pengaturan", variant: "destructive" })
-    } finally {
-      setLoading(false)
+    async function loadUser() {
+      setLoading(true)
+      try {
+        const res = await fetch("/api/users/me")
+        if (!res.ok) throw new Error("Gagal memuat pengguna")
+        const data = await res.json()
+        const u: SettingsUser = data.user
+        setUser(u)
+        setName(u.name || "")
+        setPhone(u.phone || "")
+        setBirthDate(u.birthDate ? u.birthDate.slice(0, 10) : "")
+        setLocation(u.location || "")
+        setBio(u.bio || "")
+        setIsPrivate(u.isPrivate)
+        setAvatarUrl(u.avatarUrl || "")
+      } catch {
+        toast({ title: "Gagal memuat pengaturan", variant: "destructive" })
+      } finally {
+        setLoading(false)
+      }
     }
-  }
+  }, [])
 
   const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -135,11 +136,52 @@ export function SettingsView() {
       if (updateRes.ok) {
         toast({ title: "Foto profil diperbarui" })
         setUser((prev) => (prev ? { ...prev, avatarUrl: newUrl } : prev))
+        setUserProfile({ avatarUrl: newUrl, name: user?.name ?? null })
+        // Force session refresh so header picks up new avatar
+        await updateSession({ image: newUrl })
+        window.dispatchEvent(new Event("focus"))
       }
     } catch {
       toast({ title: "Terjadi kesalahan", variant: "destructive" })
     } finally {
       setUploadingAvatar(false)
+      e.target.value = ""
+    }
+  }
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Ukuran maksimal 5MB", variant: "destructive" })
+      return
+    }
+    setUploadingCover(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/upload", { method: "POST", body: formData })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast({ title: "Gagal mengunggah", description: data.error, variant: "destructive" })
+        return
+      }
+      const data = await res.json()
+      const newUrl = data.url as string
+      const updateRes = await fetch("/api/users/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coverUrl: newUrl }),
+      })
+      if (updateRes.ok) {
+        toast({ title: "Cover foto diperbarui" })
+        setUser((prev) => (prev ? { ...prev, coverUrl: newUrl } : prev))
+        updateSession({ coverUrl: newUrl })
+      }
+    } catch {
+      toast({ title: "Terjadi kesalahan", variant: "destructive" })
+    } finally {
+      setUploadingCover(false)
       e.target.value = ""
     }
   }
@@ -169,6 +211,8 @@ export function SettingsView() {
       } else {
         const data = await res.json()
         setUser(data.user)
+        setUserProfile({ avatarUrl: data.user.avatarUrl, name: data.user.name })
+        updateSession({ name: name.trim() })
         toast({ title: "Perubahan disimpan" })
       }
     } catch {
@@ -248,6 +292,15 @@ export function SettingsView() {
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+          <label className="absolute top-2 right-2 size-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center cursor-pointer transition-colors">
+            <Camera className="size-4" />
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleCoverUpload}
+            />
+          </label>
         </div>
         <CardContent className="pt-0 pb-4 px-4 relative">
           <div className="flex items-end gap-3 -mt-10">

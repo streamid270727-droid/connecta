@@ -11,6 +11,7 @@ import {
 } from "react"
 import { useSession } from "next-auth/react"
 import { UserAvatar } from "@/components/common/user-avatar"
+import { EmojiPicker } from "@/components/common/emoji-picker"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -981,7 +982,7 @@ export function MessagesView() {
         recipientId: activeOtherUser.id,
       })
       isTypingRef.current = false
-    }, 2000)
+    }, 3000)
   }, [activeConversationId, activeOtherUser])
 
   // ===== Textarea auto-resize + emit typing =====
@@ -1394,20 +1395,12 @@ export function MessagesView() {
             {/* Composer */}
             <div className="border-t border-border/60 bg-background px-3 sm:px-4 py-2.5 safe-bottom">
               <div className="flex items-end gap-2 max-w-3xl mx-auto">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-9 shrink-0 text-muted-foreground"
-                  onClick={() =>
-                    toast({
-                      title: "Emoji",
-                      description: "Fitur emoji segera hadir",
-                    })
-                  }
-                  aria-label="Emoji"
-                >
-                  <Smile className="size-5" />
-                </Button>
+                <EmojiPicker
+                  onSelect={(emoji) => {
+                    setDraft((prev) => prev + emoji)
+                    textareaRef.current?.focus()
+                  }}
+                />
                 <Textarea
                   ref={textareaRef}
                   value={draft}

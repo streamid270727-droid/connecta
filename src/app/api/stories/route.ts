@@ -2,6 +2,17 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { z } from "zod"
+
+const createStorySchema = z.object({
+  mediaUrl: z.string().optional().nullable(),
+  content: z.string().max(280, "Teks story maksimal 280 karakter").optional().nullable(),
+  bgColor: z.string().optional().nullable(),
+  textColor: z.string().optional().nullable(),
+}).refine(
+  (data) => data.mediaUrl || data.content,
+  { message: "Story tidak boleh kosong" }
+)
 
 // GET /api/stories — returns active stories (not expired) from current user + friends
 export async function GET() {
@@ -12,6 +23,11 @@ export async function GET() {
     }
 
     const now = new Date()
+
+    // Cleanup expired stories (background task, don't await)
+    db.story.deleteMany({
+      where: { expiresAt: { lt: now } },
+    }).catch(() => {})
 
     // Get friend ids
     const friendships = await db.friendship.findMany({
@@ -102,21 +118,16 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { mediaUrl, content, bgColor, textColor } = body
+    const parsed = createStorySchema.safeParse(body)
 
-    if (!mediaUrl && !content) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Story tidak boleh kosong" },
+        { error: parsed.error.issues[0].message },
         { status: 400 }
       )
     }
 
-    if (content && content.length > 280) {
-      return NextResponse.json(
-        { error: "Teks story maksimal 280 karakter" },
-        { status: 400 }
-      )
-    }
+    const { mediaUrl, content, bgColor, textColor } = parsed.data
 
     const now = new Date()
     const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24h

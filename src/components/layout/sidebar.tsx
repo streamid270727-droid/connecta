@@ -8,14 +8,10 @@ import {
   User,
   Settings,
   Compass,
-  Sparkles,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { useAppStore, type AppView } from "@/lib/store"
 import { useSession } from "next-auth/react"
-import { UserAvatar } from "@/components/common/user-avatar"
 import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
 
 const navItems: { view: AppView; label: string; icon: React.ElementType }[] = [
   { view: "feed", label: "Beranda", icon: Home },
@@ -75,26 +71,6 @@ export function Sidebar() {
           )
         })}
       </nav>
-
-      {/* User card */}
-      <div className="mt-4 p-3 rounded-xl border bg-card">
-        <div className="flex items-center gap-3">
-          <UserAvatar
-            src={session.user.image ?? null}
-            name={session.user.name ?? null}
-            seed={session.user.id}
-            size="md"
-          />
-          <div className="min-w-0 flex-1">
-            <div className="font-medium text-sm truncate">
-              {session.user.name}
-            </div>
-            <div className="text-xs text-muted-foreground truncate">
-              @{session.user.username}
-            </div>
-          </div>
-        </div>
-      </div>
     </aside>
   )
 }

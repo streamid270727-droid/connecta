@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Play,
   Pencil,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -55,6 +56,7 @@ export interface FeedPost {
     isVerified: boolean
   }
   liked: boolean
+  emoji?: string | null
   shared: boolean
   saved?: boolean
   _count: { likes: number; comments: number; shares: number }
@@ -80,8 +82,11 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
   const { toast } = useToast()
   const [showComments, setShowComments] = useState(false)
   const [likeLoading, setLikeLoading] = useState(false)
+  const [showReactionPicker, setShowReactionPicker] = useState(false)
+  const reactionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [shareLoading, setShareLoading] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [saveLoading, setSaveLoading] = useState(false)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [imageViewer, setImageViewer] = useState<string | null>(null)
@@ -91,33 +96,45 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
   const ytId = post.videoUrl ? getYouTubeId(post.videoUrl) : null
   const vimeoId = post.videoUrl && !ytId ? getVimeoId(post.videoUrl) : null
 
-  const handleLike = async () => {
+  const handleLike = async (emoji?: string) => {
     if (likeLoading) return
     setLikeLoading(true)
+    setShowReactionPicker(false)
     const wasLiked = post.liked
+    const wasEmoji = (post as any).emoji || null
     // Optimistic update
     onUpdate(post.id, {
-      liked: !wasLiked,
+      liked: !wasLiked || !!(emoji && wasEmoji !== emoji),
+      emoji: emoji || null,
       _count: {
         ...post._count,
-        likes: post._count.likes + (wasLiked ? -1 : 1),
+        likes: wasLiked && (!emoji || wasEmoji === emoji)
+          ? post._count.likes - 1
+          : wasLiked ? post._count.likes : post._count.likes + 1,
       },
     })
     try {
-      const res = await fetch(`/api/posts/${post.id}/like`, { method: "POST" })
+      const body = emoji ? JSON.stringify({ emoji }) : undefined
+      const res = await fetch(`/api/posts/${post.id}/like`, {
+        method: "POST",
+        headers: body ? { "Content-Type": "application/json" } : {},
+        body,
+      })
       if (!res.ok) throw new Error()
       const data = await res.json()
       onUpdate(post.id, {
         liked: data.liked,
+        emoji: data.emoji,
         _count: { ...post._count, likes: data.count },
       })
     } catch {
       // Revert
       onUpdate(post.id, {
         liked: wasLiked,
+        emoji: wasEmoji,
         _count: {
           ...post._count,
-          likes: post._count.likes + (wasLiked ? 1 : -1),
+          likes: wasLiked ? post._count.likes : post._count.likes - 1,
         },
       })
       toast({ title: "Gagal", description: "Tidak dapat menyukai postingan", variant: "destructive" })
@@ -252,14 +269,9 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
-                    onClick={handleDelete}
-                    disabled={deleteLoading}
+                    onClick={() => setConfirmDeleteOpen(true)}
                   >
-                    {deleteLoading ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="size-4" />
-                    )}
+                    <Trash2 className="size-4" />
                     Hapus
                   </DropdownMenuItem>
                 </>
@@ -344,12 +356,14 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
             <div className="flex items-center gap-1">
               {post._count.likes > 0 && (
                 <span className="flex items-center gap-1">
-                  <span className="flex -space-x-1">
-                    <span className="size-4 rounded-full bg-rose-500 flex items-center justify-center ring-1 ring-background">
+                  {(post as any).emoji ? (
+                    <span className="text-sm leading-none">{(post as any).emoji}</span>
+                  ) : (
+                    <span className="size-4 rounded-full bg-rose-500 flex items-center justify-center">
                       <Heart className="size-2.5 fill-white text-white" />
                     </span>
-                  </span>
-                  {formatNumber(post._count.likes)}
+                  )}
+                  <span>{formatNumber(post._count.likes)}</span>
                 </span>
               )}
             </div>
@@ -365,14 +379,59 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
         )}
 
         {/* Actions */}
-        <div className="flex items-center border-t">
-          <ActionButton
-            onClick={handleLike}
-            active={post.liked}
-            loading={likeLoading}
-            icon={<Heart className={cn("size-4", post.liked && "fill-current")} />}
-            label="Suka"
-          />
+        <div className="flex items-center border-t px-2 sm:px-4">
+          <div
+            className="relative flex-1 flex"
+            onMouseEnter={() => {
+              if (reactionTimeoutRef.current) clearTimeout(reactionTimeoutRef.current)
+              setShowReactionPicker(true)
+            }}
+            onMouseLeave={() => {
+              reactionTimeoutRef.current = setTimeout(() => setShowReactionPicker(false), 300)
+            }}
+          >
+            <ActionButton
+              onClick={() => handleLike()}
+              active={post.liked}
+              loading={likeLoading}
+              icon={(post as any).emoji ? (
+                <span className="text-base leading-none">{(post as any).emoji}</span>
+              ) : (
+                <Heart className={cn("size-4", post.liked && "fill-current")} />
+              )}
+              label={
+                (post as any).emoji === "😂" ? "Hehe" :
+                (post as any).emoji === "😮" ? "Wow" :
+                (post as any).emoji === "😢" ? "Sedih" :
+                (post as any).emoji === "👍" ? "Jempol" :
+                "Suka"
+              }
+            />
+            {showReactionPicker && (
+              <div
+                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 flex items-center gap-0.5 bg-background border rounded-full px-2 py-1 shadow-lg z-50"
+                onMouseEnter={() => {
+                  if (reactionTimeoutRef.current) clearTimeout(reactionTimeoutRef.current)
+                }}
+                onMouseLeave={() => {
+                  reactionTimeoutRef.current = setTimeout(() => setShowReactionPicker(false), 200)
+                }}
+              >
+                {["❤️", "😂", "😮", "😢", "👍"].map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleLike(emoji)
+                    }}
+                    className="text-xl hover:scale-125 transition-transform px-0.5"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <ActionButton
             onClick={toggleComments}
             icon={<MessageCircle className="size-4" />}
@@ -428,7 +487,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
           <DialogHeader>
             <DialogTitle>Bagikan Postingan</DialogTitle>
             <DialogDescription>
-              Postingan akan dibagikan ke feed Anda. Pengikut Anda akan melihatnya.
+              Bagikan ke feed Anda atau ke platform lain.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-xl border bg-muted/30 p-3 max-h-40 overflow-y-auto">
@@ -450,6 +509,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
               {post.content || "(tanpa teks)"}
             </p>
           </div>
+          {/* Share to feed */}
           <Button onClick={handleShare} disabled={shareLoading || post.shared}>
             {shareLoading ? (
               <>
@@ -461,10 +521,46 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
             ) : (
               <>
                 <Send className="size-4" />
-                Bagikan Sekarang
+                Bagikan ke Feed
               </>
             )}
           </Button>
+          {/* External share */}
+          <div className="flex items-center gap-2 pt-1">
+            <span className="text-xs text-muted-foreground">Bagikan ke:</span>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => {
+                  const text = encodeURIComponent(post.content || "Lihat postingan ini")
+                  window.open(`https://wa.me/?text=${text}`, "_blank")
+                }}
+                className="size-9 rounded-full bg-green-500/10 hover:bg-green-500/20 text-green-600 flex items-center justify-center transition-colors"
+                aria-label="WhatsApp"
+              >
+                <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+              </button>
+              <button
+                onClick={() => {
+                  const text = encodeURIComponent(post.content || "Lihat postingan ini")
+                  window.open(`https://twitter.com/intent/tweet?text=${text}`, "_blank")
+                }}
+                className="size-9 rounded-full bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 flex items-center justify-center transition-colors"
+                aria-label="Twitter"
+              >
+                <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href)
+                  toast({ title: "Tersalin", description: "Link postingan disalin ke clipboard" })
+                }}
+                className="size-9 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground flex items-center justify-center transition-colors"
+                aria-label="Salin link"
+              >
+                <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              </button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -502,6 +598,31 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
           setEditDialogOpen(false)
         }}
       />
+
+      {/* Delete confirmation */}
+      {confirmDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl border">
+            <h3 className="text-lg font-semibold mb-2">Hapus Postingan?</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Postingan ini akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setConfirmDeleteOpen(false)}>
+                Batal
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleteLoading}
+              >
+                {deleteLoading && <Loader2 className="size-4 animate-spin mr-2" />}
+                Hapus
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -519,11 +640,55 @@ function EditPostDialog({
 }) {
   const { toast } = useToast()
   const [content, setContent] = useState(post.content)
+  const [images, setImages] = useState<string[]>(post.images || [])
   const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (open) setContent(post.content)
-  }, [open, post.content])
+    if (open) {
+      setContent(post.content)
+      setImages(post.images || [])
+    }
+  }, [open, post.content, post.images])
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    if (images.length + files.length > 4) {
+      toast({ title: "Maksimal 4 gambar", variant: "destructive" })
+      return
+    }
+    setUploading(true)
+    try {
+      const uploaded: string[] = []
+      for (const file of Array.from(files)) {
+        if (file.size > 4 * 1024 * 1024) {
+          toast({ title: `${file.name} terlalu besar (maks 4MB)`, variant: "destructive" })
+          continue
+        }
+        const formData = new FormData()
+        formData.append("file", file)
+        const res = await fetch("/api/upload", { method: "POST", body: formData })
+        if (!res.ok) {
+          toast({ title: "Gagal upload", variant: "destructive" })
+          continue
+        }
+        const data = await res.json()
+        uploaded.push(data.url)
+      }
+      setImages((prev) => [...prev, ...uploaded])
+    } catch {
+      toast({ title: "Gagal upload", variant: "destructive" })
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
+  const removeImage = (idx: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== idx))
+  }
 
   const submit = async () => {
     if (loading) return
@@ -536,7 +701,7 @@ function EditPostDialog({
       const res = await fetch(`/api/posts/${post.id}/edit`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: content.trim() }),
+        body: JSON.stringify({ content: content.trim(), images }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -558,7 +723,7 @@ function EditPostDialog({
         <DialogHeader>
           <DialogTitle>Edit Postingan</DialogTitle>
           <DialogDescription className="sr-only">
-            Perbarui teks postingan Anda.
+            Perbarui teks dan gambar postingan Anda.
           </DialogDescription>
         </DialogHeader>
         <Textarea
@@ -568,6 +733,50 @@ function EditPostDialog({
           maxLength={5000}
           autoFocus
         />
+
+        {/* Image management */}
+        <div className="space-y-2">
+          {images.length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              {images.map((img, idx) => (
+                <div key={idx} className="relative group rounded-lg overflow-hidden border border-border/60">
+                  <img src={img} alt="" className="w-full h-28 object-cover" />
+                  <button
+                    onClick={() => removeImage(idx)}
+                    className="absolute top-1 right-1 size-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    type="button"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {images.length < 4 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="w-full"
+              type="button"
+            >
+              {uploading ? (
+                <Loader2 className="size-4 animate-spin mr-2" />
+              ) : null}
+              {images.length === 0 ? "Tambah Gambar" : "Tambah Gambar Lain"} ({images.length}/4)
+            </Button>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            multiple
+            className="hidden"
+            onChange={handleImageUpload}
+          />
+        </div>
+
         <div className="flex justify-between items-center">
           <span className="text-xs text-muted-foreground">{content.length}/5000</span>
           <div className="flex gap-2">
@@ -733,7 +942,8 @@ function VideoEmbed({
 }
 
 function renderContentWithLinks(content: string) {
-  const parts = content.split(/(https?:\/\/[^\s]+)/g)
+  // Split by URLs and @mentions
+  const parts = content.split(/(https?:\/\/[^\s]+|@\w+)/g)
   return parts.map((part, i) => {
     if (/^https?:\/\//.test(part)) {
       return (
@@ -743,6 +953,19 @@ function renderContentWithLinks(content: string) {
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary hover:underline break-all"
+        >
+          {part}
+        </a>
+      )
+    }
+    if (/^@\w+$/.test(part)) {
+      const username = part.slice(1)
+      return (
+        <a
+          key={i}
+          href={`/profile/${username}`}
+          className="text-primary hover:underline font-medium"
+          onClick={(e) => e.stopPropagation()}
         >
           {part}
         </a>

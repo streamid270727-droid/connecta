@@ -31,7 +31,11 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "Connecta Team" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: [
+      { url: "/favicon.png", sizes: "192x192", type: "image/png" },
+      { url: "/favicon.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/favicon.png",
   },
   openGraph: {
     title: "Connecta — Terhubung, Berbagi, Berkembang",

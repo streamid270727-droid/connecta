@@ -58,9 +58,20 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string
         session.user.username = token.username as string
         session.user.isVerified = token.isVerified as boolean | undefined
+        // Fetch fresh avatar/name from DB
+        try {
+          const dbUser = await db.user.findUnique({
+            where: { id: token.id as string },
+            select: { avatarUrl: true, name: true },
+          })
+          if (dbUser) {
+            session.user.image = dbUser.avatarUrl
+            session.user.name = dbUser.name
+          }
+        } catch {}
       }
       return session
     },
   },
-  secret: process.env.NEXTAUTH_SECRET || "connecta-dev-secret-key-change-in-production-2024",
+  secret: process.env.NEXTAUTH_SECRET,
 }

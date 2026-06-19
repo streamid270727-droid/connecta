@@ -12,6 +12,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const onlyCount = searchParams.get("count") === "1"
+    const cursor = searchParams.get("cursor")
 
     if (onlyCount) {
       const [count, unreadCount] = await Promise.all([
@@ -31,7 +32,8 @@ export async function GET(request: Request) {
     const notifications = await db.notification.findMany({
       where: { recipientId: session.user.id },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: 21, // fetch one extra to know if there's more
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       include: {
         actor: {
           select: {
@@ -44,7 +46,11 @@ export async function GET(request: Request) {
       },
     })
 
-    const data = notifications.map((n) => ({
+    const hasMore = notifications.length > 20
+    const items = hasMore ? notifications.slice(0, 20) : notifications
+    const nextCursor = hasMore ? items[items.length - 1].id : null
+
+    const data = items.map((n) => ({
       id: n.id,
       type: n.type,
       entityId: n.entityId,
@@ -54,7 +60,7 @@ export async function GET(request: Request) {
       actor: n.actor,
     }))
 
-    return NextResponse.json({ notifications: data, count: data.length })
+    return NextResponse.json({ notifications: data, count: data.length, nextCursor })
   } catch (error) {
     console.error("GET /api/notifications error:", error)
     return NextResponse.json({ error: "Server error" }, { status: 500 })

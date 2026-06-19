@@ -17,9 +17,9 @@ import {
   Settings,
   Compass,
   LogOut,
-  Sparkles,
   Sun,
   Moon,
+  Globe,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { UserAvatar } from "@/components/common/user-avatar"
@@ -57,8 +57,8 @@ export function MobileMenu() {
       <SheetContent side="left" className="w-72 p-0">
         <SheetHeader className="p-4 border-b">
           <div className="flex items-center gap-2">
-            <div className="size-9 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center">
-              <Sparkles className="size-5 text-white" />
+            <div className="size-9 rounded-xl bg-primary flex items-center justify-center">
+              <Globe className="size-5 text-primary-foreground" />
             </div>
             <SheetTitle className="text-lg font-bold">Connecta</SheetTitle>
           </div>

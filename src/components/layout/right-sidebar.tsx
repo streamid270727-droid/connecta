@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { Sparkles, TrendingUp, UserPlus, Hash, Flame, Activity } from "lucide-react"
+import { TrendingUp, UserPlus, Hash, Flame, Activity } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
@@ -39,45 +39,45 @@ export function RightSidebar() {
     void loadSuggestions()
     void loadOnlineFriends()
     void loadTrending()
+
+    async function loadSuggestions() {
+      try {
+        const res = await fetch("/api/friends/suggestions")
+        if (res.ok) {
+          const data = await res.json()
+          setSuggestions(data.slice(0, 5))
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    async function loadOnlineFriends() {
+      try {
+        const res = await fetch("/api/users/online")
+        if (res.ok) {
+          const data = await res.json()
+          setOnlineFriends(data.users || [])
+        }
+      } catch (e) {
+        // ignore
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    async function loadTrending() {
+      try {
+        const res = await fetch("/api/trending")
+        if (res.ok) {
+          const data = await res.json()
+          setTrending(data.trending || [])
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
   }, [session?.user?.id])
-
-  const loadSuggestions = async () => {
-    try {
-      const res = await fetch("/api/friends/suggestions")
-      if (res.ok) {
-        const data = await res.json()
-        setSuggestions(data.slice(0, 5))
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  const loadOnlineFriends = async () => {
-    try {
-      const res = await fetch("/api/users/online")
-      if (res.ok) {
-        const data = await res.json()
-        setOnlineFriends(data.users || [])
-      }
-    } catch (e) {
-      // ignore
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadTrending = async () => {
-    try {
-      const res = await fetch("/api/trending")
-      if (res.ok) {
-        const data = await res.json()
-        setTrending(data.trending || [])
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
 
   const searchTrending = (tag: string) => {
     setSearchQuery(`#${tag}`)
@@ -237,20 +237,6 @@ export function RightSidebar() {
           </div>
         )}
       </Card>
-
-      {/* Footer */}
-      <div className="text-xs text-muted-foreground space-y-1 px-1 mt-auto">
-        <div className="flex items-center gap-1.5">
-          <Sparkles className="size-3" />
-          <span>Connecta © 2024</span>
-        </div>
-        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-          <button className="hover:underline">Tentang</button>
-          <button className="hover:underline">Privasi</button>
-          <button className="hover:underline">Bantuan</button>
-          <button className="hover:underline">Ketentuan</button>
-        </div>
-      </div>
     </aside>
   )
 }

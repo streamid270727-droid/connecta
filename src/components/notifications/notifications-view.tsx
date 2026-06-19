@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useSession } from "next-auth/react"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -8,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAppStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
+import { getSocket } from "@/lib/socket"
 import { formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
@@ -143,6 +145,7 @@ const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
 
 // ===== Main component =====
 export function NotificationsView() {
+  const { data: session } = useSession()
   const { openProfile, openConversation, setView, setUnreadNotifications } =
     useAppStore()
   const { toast } = useToast()
@@ -153,6 +156,9 @@ export function NotificationsView() {
   const [error, setError] = useState<string | null>(null)
   const [markingAll, setMarkingAll] = useState(false)
   const [markingId, setMarkingId] = useState<string | null>(null)
+  const [cursor, setCursor] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.isRead).length,
@@ -160,29 +166,79 @@ export function NotificationsView() {
   )
 
   // ===== Fetcher =====
-  const fetchNotifications = useCallback(async () => {
-    setLoading(true)
+  const fetchNotifications = useCallback(async (cursorParam?: string) => {
+    if (cursorParam) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+    }
     setError(null)
     try {
-      const res = await fetch("/api/notifications")
+      const url = cursorParam
+        ? `/api/notifications?cursor=${cursorParam}`
+        : "/api/notifications"
+      const res = await fetch(url)
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || "Gagal memuat notifikasi")
       }
       const data = await res.json()
       const list: AppNotification[] = data.notifications || []
-      setNotifications(list)
-      setUnreadNotifications(list.filter((n) => !n.isRead).length)
+      if (cursorParam) {
+        setNotifications((prev) => [...prev, ...list])
+      } else {
+        setNotifications(list)
+        setUnreadNotifications(list.filter((n) => !n.isRead).length)
+      }
+      setCursor(data.nextCursor)
+      setHasMore(!!data.nextCursor)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Terjadi kesalahan")
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }, [setUnreadNotifications])
 
   useEffect(() => {
     void fetchNotifications()
   }, [fetchNotifications])
+
+  // Real-time: listen for new notifications via socket
+  const notificationsRef = useRef(notifications)
+  useEffect(() => {
+    notificationsRef.current = notifications
+  }, [notifications])
+  useEffect(() => {
+    const socket = getSocket()
+    const handleNewNotif = (data: any) => {
+      if (!data || data.recipientId !== session?.user?.id) return
+      // Add the new notification to the top of the list
+      const newNotif: AppNotification = {
+        id: data.id || `temp-${Date.now()}`,
+        type: data.type || "like",
+        recipientId: data.recipientId,
+        actorId: data.actorId || null,
+        actor: data.actor || null,
+        entityId: data.entityId || null,
+        content: data.body || data.content || "",
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      }
+      setNotifications((prev) => {
+        // Dedupe by id
+        if (prev.some((n) => n.id === newNotif.id)) return prev
+        return [newNotif, ...prev]
+      })
+      setUnreadNotifications(
+        notificationsRef.current.filter((n) => !n.isRead).length + 1
+      )
+    }
+    socket.on("notif:new", handleNewNotif)
+    return () => {
+      socket.off("notif:new", handleNewNotif)
+    }
+  }, [session?.user?.id, setUnreadNotifications])
 
   // ===== Navigate per type =====
   const navigateForType = useCallback(
@@ -416,6 +472,23 @@ export function NotificationsView() {
                 </div>
               </section>
             ))}
+          </div>
+        )}
+
+        {/* Load more */}
+        {hasMore && activeTab === "all" && (
+          <div className="flex justify-center py-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => cursor && void fetchNotifications(cursor)}
+              disabled={loadingMore}
+            >
+              {loadingMore ? (
+                <Loader2 className="size-3.5 animate-spin mr-2" />
+              ) : null}
+              Muat lebih banyak
+            </Button>
           </div>
         )}
       </div>

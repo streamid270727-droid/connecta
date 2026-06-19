@@ -2,6 +2,15 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { z } from "zod"
+
+const sendMessageSchema = z.object({
+  conversationId: z.string().min(1, "ID percakapan wajib diisi"),
+  content: z
+    .string()
+    .min(1, "Pesan tidak boleh kosong")
+    .max(2000, "Pesan maksimal 2000 karakter"),
+})
 
 export async function POST(request: Request) {
   try {
@@ -11,35 +20,16 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { conversationId, content } = body as {
-      conversationId?: string
-      content?: string
-    }
+    const parsed = sendMessageSchema.safeParse(body)
 
-    if (!conversationId || typeof conversationId !== "string") {
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "ID percakapan wajib diisi" },
+        { error: parsed.error.issues[0].message },
         { status: 400 }
       )
     }
 
-    if (
-      !content ||
-      typeof content !== "string" ||
-      content.trim().length === 0
-    ) {
-      return NextResponse.json(
-        { error: "Pesan tidak boleh kosong" },
-        { status: 400 }
-      )
-    }
-
-    if (content.length > 2000) {
-      return NextResponse.json(
-        { error: "Pesan maksimal 2000 karakter" },
-        { status: 400 }
-      )
-    }
+    const { conversationId, content } = parsed.data
 
     // Validate conversation exists and the current user is a participant
     const conversation = await db.conversation.findUnique({
@@ -137,17 +127,8 @@ export async function POST(request: Request) {
       console.error("socket emit error:", e)
     }
 
-    // Persist a notification row for the recipient
-    await db.notification.create({
-      data: {
-        recipientId,
-        actorId: session.user.id,
-        type: "message",
-        entityId: conversationId,
-        content: "mengirimi Anda pesan",
-        isRead: false,
-      },
-    })
+    // DM notifications are handled in real-time via socket only (no DB row)
+    // This keeps the notifications table from growing too fast
 
     return NextResponse.json({
       message: {

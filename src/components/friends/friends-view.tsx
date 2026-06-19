@@ -38,7 +38,6 @@ import {
   Search,
   UserX,
   Inbox,
-  Sparkles,
   X,
   Clock,
 } from "lucide-react"
@@ -212,12 +211,11 @@ export function FriendsView() {
           description: "Kalian kini berteman",
         })
         // Remove from requests and add to friends list
-        setRequests((prev) => {
-          const next = prev.filter((r) => r.id !== requestId)
-          setPendingFriendRequests(next.length)
-          return next
-        })
         const accepted = requests.find((r) => r.id === requestId)
+        setRequests((prev) => prev.filter((r) => r.id !== requestId))
+        setPendingFriendRequests(
+          requests.filter((r) => r.id !== requestId).length
+        )
         if (accepted) {
           setFriends((prev) => [
             {
@@ -265,11 +263,10 @@ export function FriendsView() {
         })
       } else {
         toast({ title: "Permintaan ditolak" })
-        setRequests((prev) => {
-          const next = prev.filter((r) => r.id !== requestId)
-          setPendingFriendRequests(next.length)
-          return next
-        })
+        setRequests((prev) => prev.filter((r) => r.id !== requestId))
+        setPendingFriendRequests(
+          requests.filter((r) => r.id !== requestId).length
+        )
       }
     } catch {
       toast({ title: "Terjadi kesalahan", variant: "destructive" })
@@ -427,7 +424,7 @@ export function FriendsView() {
                 value="suggestions"
                 className="flex-1 sm:flex-none sm:px-5 h-10 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm transition-all"
               >
-                <Sparkles className="size-4" />
+                <UserPlus className="size-4" />
                 Saran
               </TabsTrigger>
             </TabsList>
@@ -914,7 +911,7 @@ function SuggestionsTab({
         <ErrorState message={error} onRetry={onRetry} />
       ) : suggestions.length === 0 ? (
         <EmptyState
-          icon={<Sparkles className="size-12" />}
+          icon={<UserPlus className="size-12" />}
           title="Tidak ada saran"
           description="Saran teman akan muncul di sini saat tersedia."
         />

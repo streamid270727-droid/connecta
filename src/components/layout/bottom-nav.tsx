@@ -23,8 +23,18 @@ export function BottomNav() {
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 glass safe-bottom">
-      <div className="grid grid-cols-6 h-14">
-        {items.map((item) => {
+      {/* Floating compose button */}
+      <button
+        onClick={() => setComposerOpen(true)}
+        className="absolute -top-5 left-1/2 -translate-x-1/2 z-50"
+      >
+        <div className="size-12 rounded-full bg-primary flex items-center justify-center shadow-lg">
+          <Plus className="size-6 text-white" />
+        </div>
+      </button>
+
+      <div className="grid grid-cols-5 h-14">
+        {items.filter(i => i.view !== "compose").map((item) => {
           const isActive =
             (item.view === "profile" && currentView === "profile") ||
             (item.view !== "profile" && item.view !== "compose" && currentView === item.view)
@@ -34,20 +44,6 @@ export function BottomNav() {
               : item.view === "messages"
               ? unreadMessages
               : 0
-
-          if (item.view === "compose") {
-            return (
-              <button
-                key={item.view}
-                onClick={() => setComposerOpen(true)}
-                className="flex items-center justify-center"
-              >
-                <div className="size-10 rounded-full bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-md shadow-rose-500/40">
-                  <Plus className="size-5 text-white" />
-                </div>
-              </button>
-            )
-          }
 
           return (
             <button

@@ -52,3 +52,18 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# database
+db/*.db
+prisma/*.db
+
+# uploads
+public/uploads/
+
+# package lock (project uses bun)
+package-lock.json
+
+# tool results & worklogs
+tool-results/
+worklog.md
+.zscripts/

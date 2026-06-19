@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import { PostCard, type FeedPost } from "@/components/feed/post-card"
 import { Button } from "@/components/ui/button"
-import { Loader2, RefreshCw, Sparkles, TrendingUp } from "lucide-react"
+import { Loader2, RefreshCw, Globe, TrendingUp } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export function DiscoverView() {
@@ -117,7 +117,7 @@ export function DiscoverView() {
           </div>
         ) : posts.length === 0 ? (
           <div className="text-center py-16">
-            <Sparkles className="size-12 mx-auto mb-3 text-muted-foreground/50" />
+            <Globe className="size-12 mx-auto mb-3 text-muted-foreground/50" />
             <p className="text-muted-foreground">Belum ada postingan untuk dijelajahi</p>
           </div>
         ) : (
@@ -137,7 +137,7 @@ export function DiscoverView() {
             )}
             {!hasMore && posts.length > 0 && (
               <div className="text-center py-8 text-sm text-muted-foreground">
-                <Sparkles className="size-5 mx-auto mb-2 opacity-50" />
+                <Globe className="size-5 mx-auto mb-2 opacity-50" />
                 Itulah semua untuk sekarang
               </div>
             )}

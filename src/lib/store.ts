@@ -42,6 +42,10 @@ interface AppState {
   searchQuery: string
   setSearchQuery: (q: string) => void
 
+  // Current user profile (for reactive avatar/name updates)
+  userProfile: { avatarUrl: string | null; name: string | null } | null
+  setUserProfile: (profile: { avatarUrl: string | null; name: string | null }) => void
+
   // Unread counts (refreshed from server)
   unreadNotifications: number
   unreadMessages: number
@@ -55,7 +59,7 @@ export const useAppStore = create<AppState>((set) => ({
   currentView: "feed",
   profileTargetId: null,
   conversationTarget: null,
-  setView: (view) => set({ currentView: view, profileTargetId: view === "profile" ? null : null }),
+  setView: (view) => set({ currentView: view, profileTargetId: null }),
   openProfile: (userId) =>
     set({ currentView: "profile", profileTargetId: userId }),
   openConversation: (conversationId, otherUserId) =>
@@ -72,6 +76,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   searchQuery: "",
   setSearchQuery: (q) => set({ searchQuery: q }),
+
+  userProfile: null,
+  setUserProfile: (profile) => set({ userProfile: profile }),
 
   unreadNotifications: 0,
   unreadMessages: 0,

@@ -17,7 +17,6 @@ import {
   Users,
   MessageCircle,
   Shield,
-  Zap,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -104,12 +103,6 @@ export function AuthScreen() {
     } finally {
       setLoading(null)
     }
-  }
-
-  const fillDemo = async () => {
-    setLoginEmail("demo@connecta.app")
-    setLoginPassword("demo1234")
-    toast.info("Kredensial demo terisi. Klik Masuk.")
   }
 
   return (
@@ -224,17 +217,6 @@ export function AuthScreen() {
                   ) : (
                     "Masuk"
                   )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground w-full"
-                  onClick={fillDemo}
-                  disabled={loading !== null}
-                >
-                  <Zap className="size-3.5" />
-                  Gunakan akun demo
                 </Button>
               </form>
             </TabsContent>

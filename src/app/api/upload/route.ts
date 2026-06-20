@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { writeFile, mkdir } from "fs/promises"
-import path from "path"
-import { randomUUID } from "crypto"
+import { uploadImage } from "@/lib/cloudinary"
 import { rateLimit } from "@/lib/rate-limit"
 
 const MAX_SIZE = 4 * 1024 * 1024 // 4MB
@@ -16,7 +14,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Rate limit: 10 uploads per minute per user
     const { success } = rateLimit(`upload:${session.user.id}`, 10, 60000)
     if (!success) {
       return NextResponse.json({ error: "Terlalu banyak upload. Coba lagi dalam 1 menit." }, { status: 429 })
@@ -42,16 +39,9 @@ export async function POST(request: Request) {
       )
     }
 
-    const ext = file.type.split("/")[1]
-    const filename = `${session.user.id}-${randomUUID()}.${ext}`
-    const uploadDir = path.join(process.cwd(), "public", "uploads")
-    await mkdir(uploadDir, { recursive: true })
-    const filepath = path.join(uploadDir, filename)
+    const { url } = await uploadImage(file, "connecta")
 
-    const buffer = Buffer.from(await file.arrayBuffer())
-    await writeFile(filepath, buffer)
-
-    return NextResponse.json({ url: `/uploads/${filename}` })
+    return NextResponse.json({ url })
   } catch (error) {
     console.error("Upload error:", error)
     return NextResponse.json({ error: "Gagal mengunggah file" }, { status: 500 })

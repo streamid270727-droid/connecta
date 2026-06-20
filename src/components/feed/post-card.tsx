@@ -22,6 +22,14 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -29,25 +37,26 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { UserAvatar } from "@/components/common/user-avatar"
+import { OptimizedImage } from "@/components/common/optimized-image"
 import { CommentSection } from "@/components/feed/comment-section"
 import { useAppStore } from "@/lib/store"
 import { useSession } from "next-auth/react"
 import { useToast } from "@/hooks/use-toast"
 import { formatRelativeTime, formatNumber, getYouTubeId, getVimeoId } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog"
 
 export interface FeedPost {
   id: string
   content: string
   images: string[]
   videoUrl: string | null
+  linkPreview?: {
+    title: string
+    description: string
+    image: string | null
+    url: string
+    siteName: string | null
+  } | null
   createdAt: string
   author: {
     id: string
@@ -68,7 +77,13 @@ export interface FeedPost {
     images: string[]
     videoUrl: string | null
     createdAt: string
-    author: { id: string; name: string; username: string; avatarUrl: string | null; isVerified: boolean }
+    author: {
+      id: string
+      name: string
+      username: string
+      avatarUrl: string | null
+      isVerified: boolean
+    }
   } | null
 }
 
@@ -148,9 +163,12 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
       reactionSummary: newSummary,
       _count: {
         ...post._count,
-        likes: wasLiked && (!emoji || wasEmoji === emoji)
-          ? post._count.likes - 1
-          : wasLiked ? post._count.likes : post._count.likes + 1,
+        likes:
+          wasLiked && (!emoji || wasEmoji === emoji)
+            ? post._count.likes - 1
+            : wasLiked
+              ? post._count.likes
+              : post._count.likes + 1,
       },
     })
     try {
@@ -179,7 +197,11 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
           likes: wasLiked ? post._count.likes : post._count.likes - 1,
         },
       })
-      toast({ title: "Gagal", description: "Tidak dapat menyukai postingan", variant: "destructive" })
+      toast({
+        title: "Gagal",
+        description: "Tidak dapat menyukai postingan",
+        variant: "destructive",
+      })
     } finally {
       setLikeLoading(false)
     }
@@ -192,7 +214,11 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
       const res = await fetch(`/api/posts/${post.id}/share`, { method: "POST" })
       const data = await res.json()
       if (!res.ok) {
-        toast({ title: "Gagal", description: data.error || "Gagal membagikan", variant: "destructive" })
+        toast({
+          title: "Gagal",
+          description: data.error || "Gagal membagikan",
+          variant: "destructive",
+        })
       } else {
         toast({ title: "Dibagikan!", description: "Postingan telah dibagikan ke feed Anda" })
         onUpdate(post.id, {
@@ -275,10 +301,13 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
 
   return (
     <>
-      <Card className="overflow-hidden border shadow-sm hover:shadow-md transition-shadow">
+      <Card className="overflow-hidden border shadow-sm transition-shadow hover:shadow-md">
         {/* Header */}
         <div className="flex items-center gap-3 p-3 sm:p-4">
-          <button onClick={() => openProfile(post.author.id)}>
+          <button
+            onClick={() => openProfile(post.author.id)}
+            aria-label={`Lihat profil ${post.author.name}`}
+          >
             <UserAvatar
               src={post.author.avatarUrl}
               name={post.author.name}
@@ -291,12 +320,12 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
               onClick={() => openProfile(post.author.id)}
               className="flex items-center gap-1 hover:underline"
             >
-              <span className="font-semibold text-sm truncate">{post.author.name}</span>
+              <span className="truncate text-sm font-semibold">{post.author.name}</span>
               {post.author.isVerified && (
-                <CheckCircle2 className="size-3.5 fill-primary text-primary-foreground" />
+                <CheckCircle2 className="fill-primary text-primary-foreground size-3.5" />
               )}
             </button>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <div className="text-muted-foreground flex items-center gap-1 text-xs">
               <span>@{post.author.username}</span>
               <span>·</span>
               <span>{formatRelativeTime(post.createdAt)}</span>
@@ -305,7 +334,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8">
+              <Button variant="ghost" size="icon" className="size-8" aria-label="Opsi lainnya">
                 <MoreHorizontal className="size-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -318,7 +347,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                 {saveLoading ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Bookmark className={cn("size-4", post.saved && "fill-current text-primary")} />
+                  <Bookmark className={cn("size-4", post.saved && "text-primary fill-current")} />
                 )}
                 {post.saved ? "Hapus dari Simpanan" : "Simpan"}
               </DropdownMenuItem>
@@ -350,8 +379,8 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
 
         {/* Content */}
         {post.content && (
-          <div className="px-3 sm:px-4 pb-3">
-            <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+          <div className="px-3 pb-3 sm:px-4">
+            <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
               <ContentWithLinks content={post.content} />
             </p>
           </div>
@@ -359,7 +388,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
 
         {/* Shared post (embedded) */}
         {post.sharedFrom && (
-          <div className="mx-3 sm:mx-4 mb-3 rounded-xl border bg-muted/30 overflow-hidden">
+          <div className="bg-muted/30 mx-3 mb-3 overflow-hidden rounded-xl border sm:mx-4">
             <div className="flex items-center gap-2 p-3 pb-2">
               <UserAvatar
                 src={post.sharedFrom.author.avatarUrl}
@@ -369,41 +398,41 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
               />
               <div className="min-w-0">
                 <div className="flex items-center gap-1">
-                  <span className="font-semibold text-xs truncate">
+                  <span className="truncate text-xs font-semibold">
                     {post.sharedFrom.author.name}
                   </span>
                   {post.sharedFrom.author.isVerified && (
-                    <CheckCircle2 className="size-3 fill-primary text-primary-foreground" />
+                    <CheckCircle2 className="fill-primary text-primary-foreground size-3" />
                   )}
                 </div>
-                <span className="text-[11px] text-muted-foreground">
-                  @{post.sharedFrom.author.username} · {formatRelativeTime(post.sharedFrom.createdAt)}
+                <span className="text-muted-foreground text-[11px]">
+                  @{post.sharedFrom.author.username} ·{" "}
+                  {formatRelativeTime(post.sharedFrom.createdAt)}
                 </span>
               </div>
             </div>
             {post.sharedFrom.content && (
-              <p className="text-sm px-3 pb-2 whitespace-pre-wrap break-words">
+              <p className="px-3 pb-2 text-sm break-words whitespace-pre-wrap">
                 {post.sharedFrom.content}
               </p>
             )}
             {post.sharedFrom.images?.length > 0 && (
               <PostImages images={post.sharedFrom.images} onOpen={setImageViewer} />
             )}
-            {post.sharedFrom.videoUrl && (
-              <VideoEmbed url={post.sharedFrom.videoUrl} />
-            )}
+            {post.sharedFrom.videoUrl && <VideoEmbed url={post.sharedFrom.videoUrl} />}
           </div>
         )}
 
         {/* Images */}
-        {post.images.length > 0 && (
-          <PostImages images={post.images} onOpen={setImageViewer} />
-        )}
+        {post.images.length > 0 && <PostImages images={post.images} onOpen={setImageViewer} />}
 
         {/* Video */}
         {post.videoUrl && (ytId || vimeoId) && (
           <VideoEmbed url={post.videoUrl} ytId={ytId} vimeoId={vimeoId} />
         )}
+
+        {/* Link preview */}
+        {post.linkPreview && <LinkPreviewCard preview={post.linkPreview} />}
 
         {/* Link preview (if videoUrl is a non-embeddable link) */}
         {post.videoUrl && !ytId && !vimeoId && (
@@ -411,16 +440,16 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
             href={post.videoUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="mx-3 sm:mx-4 mb-3 flex items-center gap-2 p-3 rounded-xl border bg-muted/30 hover:bg-muted/60 transition-colors"
+            className="bg-muted/30 hover:bg-muted/60 mx-3 mb-3 flex items-center gap-2 rounded-xl border p-3 transition-colors sm:mx-4"
           >
-            <Link2 className="size-4 text-primary" />
-            <span className="text-sm text-primary truncate">{post.videoUrl}</span>
+            <Link2 className="text-primary size-4" />
+            <span className="text-primary truncate text-sm">{post.videoUrl}</span>
           </a>
         )}
 
         {/* Counts summary */}
         {(post._count.likes > 0 || post._count.comments > 0 || post._count.shares > 0) && (
-          <div className="flex items-center justify-between px-3 sm:px-4 py-2 text-xs text-muted-foreground">
+          <div className="text-muted-foreground flex items-center justify-between px-3 py-2 text-xs sm:px-4">
             <div className="flex items-center gap-1">
               {post._count.likes > 0 && (
                 <span className="flex items-center gap-1">
@@ -435,7 +464,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                     </span>
                   ) : (
                     <>
-                      <span className="size-4 rounded-full bg-rose-500 flex items-center justify-center">
+                      <span className="flex size-4 items-center justify-center rounded-full bg-rose-500">
                         <Heart className="size-2.5 fill-white text-white" />
                       </span>
                       <span>{formatNumber(post._count.likes)}</span>
@@ -448,9 +477,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
               {post._count.comments > 0 && (
                 <span>{formatNumber(post._count.comments)} komentar</span>
               )}
-              {post._count.shares > 0 && (
-                <span>{formatNumber(post._count.shares)} bagikan</span>
-              )}
+              {post._count.shares > 0 && <span>{formatNumber(post._count.shares)} bagikan</span>}
             </div>
           </div>
         )}
@@ -458,7 +485,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
         {/* Actions */}
         <div className="flex items-center border-t px-2 sm:px-4">
           <div
-            className="relative flex-1 flex"
+            className="relative flex flex-1"
             onMouseEnter={() => {
               if (reactionTimeoutRef.current) clearTimeout(reactionTimeoutRef.current)
               setShowReactionPicker(true)
@@ -471,22 +498,28 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
               onClick={() => handleLike()}
               active={post.liked}
               loading={likeLoading}
-              icon={(post as any).emoji ? (
-                <span className="text-base leading-none">{(post as any).emoji}</span>
-              ) : (
-                <Heart className={cn("size-4", post.liked && "fill-current")} />
-              )}
+              icon={
+                (post as any).emoji ? (
+                  <span className="text-base leading-none">{(post as any).emoji}</span>
+                ) : (
+                  <Heart className={cn("size-4", post.liked && "fill-current")} />
+                )
+              }
               label={
-                (post as any).emoji === "😂" ? "Hehe" :
-                (post as any).emoji === "😮" ? "Wow" :
-                (post as any).emoji === "😢" ? "Sedih" :
-                (post as any).emoji === "👍" ? "Jempol" :
-                "Suka"
+                (post as any).emoji === "😂"
+                  ? "Hehe"
+                  : (post as any).emoji === "😮"
+                    ? "Wow"
+                    : (post as any).emoji === "😢"
+                      ? "Sedih"
+                      : (post as any).emoji === "👍"
+                        ? "Jempol"
+                        : "Suka"
               }
             />
             {showReactionPicker && (
               <div
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 flex items-center gap-0.5 bg-background border rounded-full px-2 py-1 shadow-lg z-50"
+                className="bg-background absolute bottom-full left-1/2 z-50 mb-1 flex -translate-x-1/2 items-center gap-0.5 rounded-full border px-2 py-1 shadow-lg"
                 onMouseEnter={() => {
                   if (reactionTimeoutRef.current) clearTimeout(reactionTimeoutRef.current)
                 }}
@@ -501,7 +534,8 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                       e.stopPropagation()
                       handleLike(emoji)
                     }}
-                    className="text-xl hover:scale-125 transition-transform px-0.5"
+                    className="px-0.5 text-xl transition-transform hover:scale-125"
+                    aria-label={`Reaksi ${emoji}`}
                   >
                     {emoji}
                   </button>
@@ -523,7 +557,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
             onClick={handleSave}
             disabled={saveLoading}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors hover:bg-muted/60 sm:hidden",
+              "hover:bg-muted/60 flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors sm:hidden",
               post.saved ? "text-primary" : "text-muted-foreground"
             )}
             aria-label={post.saved ? "Hapus dari simpanan" : "Simpan"}
@@ -538,7 +572,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
             onClick={handleSave}
             disabled={saveLoading}
             className={cn(
-              "hidden sm:flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors hover:bg-muted/60",
+              "hover:bg-muted/60 hidden flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors sm:flex",
               post.saved ? "text-primary" : "text-muted-foreground"
             )}
             aria-label={post.saved ? "Hapus dari simpanan" : "Simpan"}
@@ -553,9 +587,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
         </div>
 
         {/* Comments */}
-        {showComments && (
-          <CommentSection postId={post.id} commentCount={post._count.comments} />
-        )}
+        {showComments && <CommentSection postId={post.id} commentCount={post._count.comments} />}
       </Card>
 
       {/* Share dialog */}
@@ -563,12 +595,10 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Bagikan Postingan</DialogTitle>
-            <DialogDescription>
-              Bagikan ke feed Anda atau ke platform lain.
-            </DialogDescription>
+            <DialogDescription>Bagikan ke feed Anda atau ke platform lain.</DialogDescription>
           </DialogHeader>
-          <div className="rounded-xl border bg-muted/30 p-3 max-h-40 overflow-y-auto">
-            <div className="flex items-center gap-2 mb-2">
+          <div className="bg-muted/30 max-h-40 overflow-y-auto rounded-xl border p-3">
+            <div className="mb-2 flex items-center gap-2">
               <UserAvatar
                 src={post.author.avatarUrl}
                 name={post.author.name}
@@ -576,13 +606,13 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                 size="sm"
               />
               <div className="min-w-0">
-                <div className="text-xs font-semibold truncate">{post.author.name}</div>
-                <div className="text-[11px] text-muted-foreground truncate">
+                <div className="truncate text-xs font-semibold">{post.author.name}</div>
+                <div className="text-muted-foreground truncate text-[11px]">
                   @{post.author.username}
                 </div>
               </div>
             </div>
-            <p className="text-sm line-clamp-3 text-muted-foreground">
+            <p className="text-muted-foreground line-clamp-3 text-sm">
               {post.content || "(tanpa teks)"}
             </p>
           </div>
@@ -604,37 +634,52 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
           </Button>
           {/* External share */}
           <div className="flex items-center gap-2 pt-1">
-            <span className="text-xs text-muted-foreground">Bagikan ke:</span>
+            <span className="text-muted-foreground text-xs">Bagikan ke:</span>
             <div className="flex gap-1.5">
               <button
                 onClick={() => {
                   const text = encodeURIComponent(post.content || "Lihat postingan ini")
                   window.open(`https://wa.me/?text=${text}`, "_blank")
                 }}
-                className="size-9 rounded-full bg-green-500/10 hover:bg-green-500/20 text-green-600 flex items-center justify-center transition-colors"
+                className="flex size-9 items-center justify-center rounded-full bg-green-500/10 text-green-600 transition-colors hover:bg-green-500/20 dark:text-green-400"
                 aria-label="WhatsApp"
               >
-                <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                </svg>
               </button>
               <button
                 onClick={() => {
                   const text = encodeURIComponent(post.content || "Lihat postingan ini")
                   window.open(`https://twitter.com/intent/tweet?text=${text}`, "_blank")
                 }}
-                className="size-9 rounded-full bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 flex items-center justify-center transition-colors"
+                className="flex size-9 items-center justify-center rounded-full bg-sky-500/10 text-sky-600 transition-colors hover:bg-sky-500/20 dark:text-sky-400"
                 aria-label="Twitter"
               >
-                <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
               </button>
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(window.location.href)
                   toast({ title: "Tersalin", description: "Link postingan disalin ke clipboard" })
                 }}
-                className="size-9 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground flex items-center justify-center transition-colors"
+                className="bg-muted hover:bg-muted/80 text-muted-foreground flex size-9 items-center justify-center rounded-full transition-colors"
                 aria-label="Salin link"
               >
-                <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                <svg
+                  className="size-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                </svg>
               </button>
             </div>
           </div>
@@ -645,7 +690,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
       {imageViewer && (
         <Dialog open={!!imageViewer} onOpenChange={(o) => !o && setImageViewer(null)}>
           <DialogContent
-            className="max-w-4xl p-0 overflow-hidden bg-black/90 border-none"
+            className="max-w-4xl overflow-hidden border-none bg-black/90 p-0"
             aria-label="Pratinjau gambar"
           >
             <DialogHeader className="sr-only">
@@ -654,11 +699,11 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                 Klik di luar gambar atau tekan Escape untuk menutup.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex items-center justify-center min-h-[60vh] max-h-[90vh]">
+            <div className="flex max-h-[90vh] min-h-[60vh] items-center justify-center">
               <img
                 src={imageViewer}
                 alt="Gambar postingan dalam ukuran penuh"
-                className="max-w-full max-h-[90vh] object-contain"
+                className="max-h-[90vh] max-w-full object-contain"
               />
             </div>
           </DialogContent>
@@ -677,29 +722,25 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
       />
 
       {/* Delete confirmation */}
-      {confirmDeleteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-background rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl border">
-            <h3 className="text-lg font-semibold mb-2">Hapus Postingan?</h3>
-            <p className="text-sm text-muted-foreground mb-6">
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hapus Postingan?</DialogTitle>
+            <DialogDescription>
               Postingan ini akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.
-            </p>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setConfirmDeleteOpen(false)}>
-                Batal
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={deleteLoading}
-              >
-                {deleteLoading && <Loader2 className="size-4 animate-spin mr-2" />}
-                Hapus
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteOpen(false)}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleteLoading}>
+              {deleteLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
@@ -806,7 +847,7 @@ function EditPostDialog({
         <Textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          className="min-h-32 max-h-64 resize-none"
+          className="max-h-64 min-h-32 resize-none"
           maxLength={5000}
           autoFocus
         />
@@ -816,12 +857,16 @@ function EditPostDialog({
           {images.length > 0 && (
             <div className="grid grid-cols-2 gap-2">
               {images.map((img, idx) => (
-                <div key={idx} className="relative group rounded-lg overflow-hidden border border-border/60">
-                  <img src={img} alt="" className="w-full h-28 object-cover" />
+                <div
+                  key={idx}
+                  className="group border-border/60 relative aspect-square overflow-hidden rounded-lg border"
+                >
+                  <OptimizedImage src={img} alt="" fill className="object-cover" />
                   <button
                     onClick={() => removeImage(idx)}
-                    className="absolute top-1 right-1 size-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
                     type="button"
+                    aria-label="Hapus gambar"
                   >
                     <X className="size-3" />
                   </button>
@@ -838,9 +883,7 @@ function EditPostDialog({
               className="w-full"
               type="button"
             >
-              {uploading ? (
-                <Loader2 className="size-4 animate-spin mr-2" />
-              ) : null}
+              {uploading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
               {images.length === 0 ? "Tambah Gambar" : "Tambah Gambar Lain"} ({images.length}/4)
             </Button>
           )}
@@ -854,8 +897,8 @@ function EditPostDialog({
           />
         </div>
 
-        <div className="flex justify-between items-center">
-          <span className="text-xs text-muted-foreground">{content.length}/5000</span>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground text-xs">{content.length}/5000</span>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Batal
@@ -888,7 +931,7 @@ function ActionButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors hover:bg-muted/60",
+        "hover:bg-muted/60 flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors",
         active ? "text-primary" : "text-muted-foreground"
       )}
     >
@@ -898,34 +941,31 @@ function ActionButton({
   )
 }
 
-function PostImages({
-  images,
-  onOpen,
-}: {
-  images: string[]
-  onOpen: (url: string) => void
-}) {
+function PostImages({ images, onOpen }: { images: string[]; onOpen: (url: string) => void }) {
   if (images.length === 0) return null
   if (images.length === 1) {
     return (
       <button
         onClick={() => onOpen(images[0])}
-        className="block w-full bg-muted"
+        className="bg-muted relative block w-full overflow-hidden"
+        style={{ height: "min(600px, 70vh)" }}
+        aria-label="Lihat gambar"
       >
-        <img
-          src={images[0]}
-          alt=""
-          className="w-full max-h-[600px] object-cover"
-        />
+        <OptimizedImage src={images[0]} alt="" fill className="object-cover" />
       </button>
     )
   }
   if (images.length === 2) {
     return (
-      <div className="grid grid-cols-2 gap-0.5 bg-muted">
+      <div className="bg-muted grid grid-cols-2 gap-0.5">
         {images.map((img, i) => (
-          <button key={i} onClick={() => onOpen(img)} className="block aspect-square overflow-hidden">
-            <img src={img} alt="" className="w-full h-full object-cover" />
+          <button
+            key={i}
+            onClick={() => onOpen(img)}
+            className="relative block aspect-square overflow-hidden"
+            aria-label="Lihat gambar"
+          >
+            <OptimizedImage src={img} alt="" fill className="object-cover" />
           </button>
         ))}
       </div>
@@ -933,25 +973,42 @@ function PostImages({
   }
   if (images.length === 3) {
     return (
-      <div className="grid grid-cols-2 gap-0.5 bg-muted">
-        <button onClick={() => onOpen(images[0])} className="block row-span-2 aspect-[1/2] overflow-hidden">
-          <img src={images[0]} alt="" className="w-full h-full object-cover" />
+      <div className="bg-muted grid grid-cols-2 gap-0.5">
+        <button
+          onClick={() => onOpen(images[0])}
+          className="relative row-span-2 block aspect-[1/2] overflow-hidden"
+          aria-label="Lihat gambar"
+        >
+          <OptimizedImage src={images[0]} alt="" fill className="object-cover" />
         </button>
-        <button onClick={() => onOpen(images[1])} className="block aspect-square overflow-hidden">
-          <img src={images[1]} alt="" className="w-full h-full object-cover" />
+        <button
+          onClick={() => onOpen(images[1])}
+          className="relative block aspect-square overflow-hidden"
+          aria-label="Lihat gambar"
+        >
+          <OptimizedImage src={images[1]} alt="" fill className="object-cover" />
         </button>
-        <button onClick={() => onOpen(images[2])} className="block aspect-square overflow-hidden">
-          <img src={images[2]} alt="" className="w-full h-full object-cover" />
+        <button
+          onClick={() => onOpen(images[2])}
+          className="relative block aspect-square overflow-hidden"
+          aria-label="Lihat gambar"
+        >
+          <OptimizedImage src={images[2]} alt="" fill className="object-cover" />
         </button>
       </div>
     )
   }
   // 4 images
   return (
-    <div className="grid grid-cols-2 gap-0.5 bg-muted">
+    <div className="bg-muted grid grid-cols-2 gap-0.5">
       {images.slice(0, 4).map((img, i) => (
-        <button key={i} onClick={() => onOpen(img)} className="block aspect-square overflow-hidden">
-          <img src={img} alt="" className="w-full h-full object-cover" />
+        <button
+          key={i}
+          onClick={() => onOpen(img)}
+          className="relative block aspect-square overflow-hidden"
+          aria-label="Lihat gambar"
+        >
+          <OptimizedImage src={img} alt="" fill className="object-cover" />
         </button>
       ))}
     </div>
@@ -976,23 +1033,20 @@ function VideoEmbed({
           <iframe
             src={`https://www.youtube.com/embed/${ytId}?autoplay=1`}
             title="YouTube video"
-            className="w-full h-full"
+            className="h-full w-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
         ) : (
-          <button
-            onClick={() => setPlay(true)}
-            className="group absolute inset-0 w-full h-full"
-          >
+          <button onClick={() => setPlay(true)} className="group absolute inset-0 h-full w-full">
             <img
               src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`}
               alt="YouTube thumbnail"
-              className="w-full h-full object-cover"
+              className="h-full w-full object-cover"
             />
-            <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-              <div className="size-16 rounded-full bg-red-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                <Play className="size-7 text-white fill-white ml-1" />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/30 transition-colors group-hover:bg-black/40">
+              <div className="flex size-16 items-center justify-center rounded-full bg-red-600 shadow-lg transition-transform group-hover:scale-110">
+                <Play className="ml-1 size-7 fill-white text-white" />
               </div>
             </div>
           </button>
@@ -1007,7 +1061,7 @@ function VideoEmbed({
         <iframe
           src={`https://player.vimeo.com/video/${vimeoId}`}
           title="Vimeo video"
-          className="w-full h-full"
+          className="h-full w-full"
           allow="autoplay; fullscreen; picture-in-picture"
           allowFullScreen
         />
@@ -1032,7 +1086,7 @@ function ContentWithLinks({ content }: { content: string }) {
               href={part}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary hover:underline break-all"
+              className="text-primary break-all hover:underline"
             >
               {part}
             </a>
@@ -1047,7 +1101,7 @@ function ContentWithLinks({ content }: { content: string }) {
                 e.stopPropagation()
                 openProfile(username)
               }}
-              className="text-primary hover:underline font-medium"
+              className="text-primary font-medium hover:underline"
             >
               {part}
             </button>
@@ -1063,7 +1117,7 @@ function ContentWithLinks({ content }: { content: string }) {
                 setSearchQuery(tag)
                 setView("search")
               }}
-              className="text-primary hover:underline font-medium"
+              className="text-primary font-medium hover:underline"
             >
               {part}
             </button>
@@ -1072,5 +1126,47 @@ function ContentWithLinks({ content }: { content: string }) {
         return <span key={i}>{part}</span>
       })}
     </>
+  )
+}
+
+function LinkPreviewCard({
+  preview,
+}: {
+  preview: {
+    title: string
+    description: string
+    image: string | null
+    url: string
+    siteName: string | null
+  }
+}) {
+  return (
+    <a
+      href={preview.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="bg-muted/30 hover:bg-muted/60 mx-3 mb-3 block overflow-hidden rounded-xl border transition-colors sm:mx-4"
+    >
+      {preview.image && (
+        <img
+          src={preview.image}
+          alt={preview.title}
+          className="h-40 w-full object-cover"
+          onError={(e) => {
+            ;(e.target as HTMLImageElement).style.display = "none"
+          }}
+        />
+      )}
+      <div className="p-3">
+        <div className="text-muted-foreground mb-1 flex items-center gap-1.5 text-[11px]">
+          <Link2 className="size-3" />
+          <span>{preview.siteName || new URL(preview.url).hostname}</span>
+        </div>
+        <p className="line-clamp-2 text-sm font-medium">{preview.title}</p>
+        {preview.description && (
+          <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">{preview.description}</p>
+        )}
+      </div>
+    </a>
   )
 }

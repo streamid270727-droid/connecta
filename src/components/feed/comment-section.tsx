@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useState } from "react"
 import {
   Heart,
   MessageCircle,
@@ -36,6 +36,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  useComments,
+  useCreateComment,
+  useCreateReply,
+  useToggleCommentLike,
+  useEditComment,
+  useDeleteComment,
+} from "@/hooks/api/use-comments"
 
 interface Comment {
   id: string
@@ -62,185 +70,63 @@ export function CommentSection({ postId, commentCount }: CommentSectionProps) {
   const { data: session } = useSession()
   const { openProfile } = useAppStore()
   const { toast } = useToast()
-  const [comments, setComments] = useState<Comment[]>([])
-  const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState("")
-  const [submitting, setSubmitting] = useState(false)
   const [replyTo, setReplyTo] = useState<string | null>(null)
   const [replyText, setReplyText] = useState("")
 
-  const loadComments = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/posts/${postId}/comments`)
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      setComments(data.comments)
-    } catch {
-      toast({ title: "Gagal memuat komentar", variant: "destructive" })
-    } finally {
-      setLoading(false)
-    }
-  }, [postId, toast])
-
-  useEffect(() => {
-    void loadComments()
-  }, [loadComments])
+  const { data: comments = [], isLoading } = useComments(postId)
+  const createComment = useCreateComment(postId)
+  const createReply = useCreateReply(postId)
+  const toggleLike = useToggleCommentLike(postId)
+  const editComment = useEditComment(postId)
+  const deleteComment = useDeleteComment(postId)
 
   const submitComment = async () => {
-    if (!newComment.trim() || submitting) return
-    setSubmitting(true)
+    if (!newComment.trim() || createComment.isPending) return
     try {
-      const res = await fetch(`/api/posts/${postId}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newComment.trim() }),
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        toast({ title: "Gagal", description: data.error, variant: "destructive" })
-      } else {
-        const data = await res.json()
-        setComments((prev) => [...prev, { ...data.comment, replies: [] }])
-        setNewComment("")
-      }
-    } catch {
-      toast({ title: "Gagal", variant: "destructive" })
-    } finally {
-      setSubmitting(false)
+      await createComment.mutateAsync(newComment.trim())
+      setNewComment("")
+    } catch (e: any) {
+      toast({ title: "Gagal", description: e.message, variant: "destructive" })
     }
   }
 
   const submitReply = async (parentId: string) => {
-    if (!replyText.trim() || submitting) return
-    setSubmitting(true)
+    if (!replyText.trim() || createReply.isPending) return
     try {
-      const res = await fetch(`/api/posts/${postId}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: replyText.trim(), parentId }),
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        toast({ title: "Gagal", description: data.error, variant: "destructive" })
-      } else {
-        const data = await res.json()
-        setComments((prev) =>
-          prev.map((c) =>
-            c.id === parentId
-              ? { ...c, replies: [...(c.replies || []), data.comment] }
-              : c
-          )
-        )
-        setReplyText("")
-        setReplyTo(null)
-      }
-    } catch {
-      toast({ title: "Gagal", variant: "destructive" })
-    } finally {
-      setSubmitting(false)
+      await createReply.mutateAsync({ parentId, content: replyText.trim() })
+      setReplyText("")
+      setReplyTo(null)
+    } catch (e: any) {
+      toast({ title: "Gagal", description: e.message, variant: "destructive" })
     }
   }
 
-  const toggleLike = async (commentId: string, isReply: boolean, parentId?: string) => {
-    try {
-      const res = await fetch(`/api/comments/${commentId}/like`, { method: "POST" })
-      if (!res.ok) return
-      const data = await res.json()
-      if (isReply && parentId) {
-        setComments((prev) =>
-          prev.map((c) =>
-            c.id === parentId
-              ? {
-                  ...c,
-                  replies: (c.replies || []).map((r) =>
-                    r.id === commentId
-                      ? { ...r, liked: data.liked, likeCount: data.count }
-                      : r
-                  ),
-                }
-              : c
-          )
-        )
-      } else {
-        setComments((prev) =>
-          prev.map((c) =>
-            c.id === commentId
-              ? { ...c, liked: data.liked, likeCount: data.count }
-              : c
-          )
-        )
-      }
-    } catch (e) {
-      console.error("Failed to toggle comment like:", e)
-    }
+  const handleToggleLike = (commentId: string) => {
+    toggleLike.mutate(commentId)
   }
 
-  const editComment = async (commentId: string, newContent: string, isReply: boolean, parentId?: string) => {
+  const handleEdit = async (commentId: string, newContent: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/comments/${commentId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newContent }),
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        toast({ title: "Gagal", description: data.error, variant: "destructive" })
-        return false
-      }
-      const data = await res.json()
-      if (isReply && parentId) {
-        setComments((prev) =>
-          prev.map((c) =>
-            c.id === parentId
-              ? {
-                  ...c,
-                  replies: (c.replies || []).map((r) =>
-                    r.id === commentId ? { ...r, content: data.comment.content } : r
-                  ),
-                }
-              : c
-          )
-        )
-      } else {
-        setComments((prev) =>
-          prev.map((c) =>
-            c.id === commentId ? { ...c, content: data.comment.content } : c
-          )
-        )
-      }
+      await editComment.mutateAsync({ commentId, content: newContent })
       return true
-    } catch {
-      toast({ title: "Gagal", variant: "destructive" })
+    } catch (e: any) {
+      toast({ title: "Gagal", description: e.message, variant: "destructive" })
       return false
     }
   }
 
-  const deleteComment = async (commentId: string, isReply: boolean, parentId?: string) => {
+  const handleDelete = async (commentId: string) => {
     try {
-      const res = await fetch(`/api/comments/${commentId}`, { method: "DELETE" })
-      if (!res.ok) {
-        toast({ title: "Gagal menghapus komentar", variant: "destructive" })
-        return
-      }
-      if (isReply && parentId) {
-        setComments((prev) =>
-          prev.map((c) =>
-            c.id === parentId
-              ? { ...c, replies: (c.replies || []).filter((r) => r.id !== commentId) }
-              : c
-          )
-        )
-      } else {
-        setComments((prev) => prev.filter((c) => c.id !== commentId))
-      }
+      await deleteComment.mutateAsync(commentId)
       toast({ title: "Komentar dihapus" })
     } catch {
-      toast({ title: "Gagal", variant: "destructive" })
+      toast({ title: "Gagal menghapus komentar", variant: "destructive" })
     }
   }
 
   return (
-    <div className="border-t bg-muted/20 p-3 sm:p-4 space-y-3">
+    <div className="bg-muted/20 space-y-3 border-t p-3 sm:p-4">
       {/* New comment input */}
       <div className="flex gap-2">
         <UserAvatar
@@ -249,12 +135,12 @@ export function CommentSection({ postId, commentCount }: CommentSectionProps) {
           seed={session?.user?.id}
           size="sm"
         />
-        <div className="flex-1 flex gap-2">
+        <div className="flex flex-1 gap-2">
           <Textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             placeholder="Tulis komentar..."
-            className="min-h-10 max-h-32 resize-none text-sm"
+            className="max-h-32 min-h-10 resize-none text-sm"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 submitComment()
@@ -264,10 +150,11 @@ export function CommentSection({ postId, commentCount }: CommentSectionProps) {
           <Button
             size="icon"
             onClick={submitComment}
-            disabled={!newComment.trim() || submitting}
+            disabled={!newComment.trim() || createComment.isPending}
             className="shrink-0"
+            aria-label="Kirim komentar"
           >
-            {submitting ? (
+            {createComment.isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Send className="size-4" />
@@ -277,21 +164,21 @@ export function CommentSection({ postId, commentCount }: CommentSectionProps) {
       </div>
 
       {/* Comments list */}
-      {loading ? (
+      {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 2 }).map((_, i) => (
             <div key={i} className="flex gap-2">
-              <div className="size-8 rounded-full bg-muted animate-pulse" />
+              <div className="bg-muted size-8 animate-pulse rounded-full" />
               <div className="flex-1 space-y-1.5">
-                <div className="h-2.5 w-1/3 rounded bg-muted animate-pulse" />
-                <div className="h-2 w-1/2 rounded bg-muted animate-pulse" />
+                <div className="bg-muted h-2.5 w-1/3 animate-pulse rounded" />
+                <div className="bg-muted h-2 w-1/2 animate-pulse rounded" />
               </div>
             </div>
           ))}
         </div>
       ) : comments.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-4">
-          <MessageCircle className="size-5 mx-auto mb-1 opacity-40" />
+        <p className="text-muted-foreground py-4 text-center text-xs">
+          <MessageCircle className="mx-auto mb-1 size-5 opacity-40" />
           Belum ada komentar. Jadilah yang pertama!
         </p>
       ) : (
@@ -300,26 +187,26 @@ export function CommentSection({ postId, commentCount }: CommentSectionProps) {
             <div key={comment.id} className="space-y-2">
               <CommentItem
                 comment={comment}
-                onLike={() => toggleLike(comment.id, false)}
+                onLike={() => handleToggleLike(comment.id)}
                 onReply={() => {
                   setReplyTo(replyTo === comment.id ? null : comment.id)
                   setReplyText("")
                 }}
-                onEdit={(content) => editComment(comment.id, content, false)}
-                onDelete={() => deleteComment(comment.id, false)}
+                onEdit={(content) => handleEdit(comment.id, content)}
+                onDelete={() => handleDelete(comment.id)}
                 isReplying={replyTo === comment.id}
               />
               {/* Replies */}
               {comment.replies && comment.replies.length > 0 && (
-                <div className="pl-10 space-y-2">
+                <div className="space-y-2 pl-10">
                   {comment.replies.map((reply) => (
                     <div key={reply.id} className="relative">
-                      <CornerDownRight className="absolute -left-5 top-2 size-3 text-muted-foreground" />
+                      <CornerDownRight className="text-muted-foreground absolute top-2 -left-5 size-3" />
                       <CommentItem
                         comment={reply}
-                        onLike={() => toggleLike(reply.id, true, comment.id)}
-                        onEdit={(content) => editComment(reply.id, content, true, comment.id)}
-                        onDelete={() => deleteComment(reply.id, true, comment.id)}
+                        onLike={() => handleToggleLike(reply.id)}
+                        onEdit={(content) => handleEdit(reply.id, content)}
+                        onDelete={() => handleDelete(reply.id)}
                         isReply={false}
                       />
                     </div>
@@ -328,19 +215,19 @@ export function CommentSection({ postId, commentCount }: CommentSectionProps) {
               )}
               {/* Reply input */}
               {replyTo === comment.id && (
-                <div className="pl-10 flex gap-2">
+                <div className="flex gap-2 pl-10">
                   <UserAvatar
                     src={session?.user?.image ?? null}
                     name={session?.user?.name ?? null}
                     seed={session?.user?.id}
                     size="sm"
                   />
-                  <div className="flex-1 flex gap-2">
+                  <div className="flex flex-1 gap-2">
                     <Textarea
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
                       placeholder={`Balas ke ${comment.author.name}...`}
-                      className="min-h-9 max-h-24 resize-none text-sm"
+                      className="max-h-24 min-h-9 resize-none text-sm"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -351,10 +238,11 @@ export function CommentSection({ postId, commentCount }: CommentSectionProps) {
                     <Button
                       size="icon"
                       onClick={() => submitReply(comment.id)}
-                      disabled={!replyText.trim() || submitting}
-                      className="shrink-0 size-8"
+                      disabled={!replyText.trim() || createReply.isPending}
+                      className="size-8 shrink-0"
+                      aria-label="Kirim balasan"
                     >
-                      {submitting ? (
+                      {createReply.isPending ? (
                         <Loader2 className="size-3.5 animate-spin" />
                       ) : (
                         <Send className="size-3.5" />
@@ -405,15 +293,18 @@ function CommentItem({
     if (ok !== false) setEditing(false)
   }
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     onDelete?.()
     setConfirmDelete(false)
   }
 
   return (
     <>
-      <div className="flex gap-2 group">
-        <button onClick={() => openProfile(comment.author.id)}>
+      <div className="group flex gap-2">
+        <button
+          onClick={() => openProfile(comment.author.id)}
+          aria-label={`Lihat profil ${comment.author.name}`}
+        >
           <UserAvatar
             src={comment.author.avatarUrl}
             name={comment.author.name}
@@ -421,13 +312,13 @@ function CommentItem({
             size="sm"
           />
         </button>
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           {editing ? (
             <div className="space-y-1.5">
               <Textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="min-h-10 max-h-32 resize-none text-sm"
+                className="max-h-32 min-h-10 resize-none text-sm"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSaveEdit()
@@ -455,32 +346,32 @@ function CommentItem({
                   onClick={handleSaveEdit}
                   disabled={!editContent.trim() || saving}
                 >
-                  {saving ? <Loader2 className="size-3 animate-spin mr-1" /> : null}
+                  {saving ? <Loader2 className="mr-1 size-3 animate-spin" /> : null}
                   Simpan
                 </Button>
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl bg-muted/60 px-3 py-2 inline-block">
+            <div className="bg-muted/60 inline-block rounded-2xl px-3 py-2">
               <button
                 onClick={() => openProfile(comment.author.id)}
                 className="flex items-center gap-1 hover:underline"
               >
-                <span className="font-semibold text-xs">{comment.author.name}</span>
+                <span className="text-xs font-semibold">{comment.author.name}</span>
                 {comment.author.isVerified && (
-                  <CheckCircle2 className="size-3 fill-primary text-primary-foreground" />
+                  <CheckCircle2 className="fill-primary text-primary-foreground size-3" />
                 )}
               </button>
-              <p className="text-sm whitespace-pre-wrap break-words">{comment.content}</p>
+              <p className="text-sm break-words whitespace-pre-wrap">{comment.content}</p>
             </div>
           )}
           {!editing && (
-            <div className="flex items-center gap-3 mt-0.5 ml-1">
-              <span className="text-[11px] text-muted-foreground">
+            <div className="mt-0.5 ml-1 flex items-center gap-3">
+              <span className="text-muted-foreground text-[11px]">
                 {formatRelativeTime(comment.createdAt)}
               </span>
               {comment.likeCount > 0 && (
-                <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
+                <span className="text-muted-foreground flex items-center gap-0.5 text-[11px]">
                   <Heart className="size-2.5 fill-current" />
                   {formatNumber(comment.likeCount)}
                 </span>
@@ -508,20 +399,23 @@ function CommentItem({
               {isOwn && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="text-muted-foreground hover:text-foreground">
+                    <button
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label="Opsi komentar"
+                    >
                       <MoreHorizontal className="size-3.5" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     <DropdownMenuItem onClick={() => setEditing(true)}>
-                      <Pencil className="size-3.5 mr-2" />
+                      <Pencil className="mr-2 size-3.5" />
                       Edit
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-destructive"
                       onClick={() => setConfirmDelete(true)}
                     >
-                      <Trash2 className="size-3.5 mr-2" />
+                      <Trash2 className="mr-2 size-3.5" />
                       Hapus
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -532,7 +426,8 @@ function CommentItem({
         </div>
         <button
           onClick={onLike}
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 self-start"
+          className="self-start p-1 opacity-0 transition-opacity group-hover:opacity-100"
+          aria-label={comment.liked ? "Unlike komentar" : "Like komentar"}
         >
           <Heart
             className={cn(

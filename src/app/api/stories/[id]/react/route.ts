@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { rateLimit } from "@/lib/rate-limit"
 import { z } from "zod"
 
 const reactionSchema = z.object({
@@ -18,6 +19,13 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const { id: storyId } = await params
+
+    // Rate limit: 20 reactions per minute per user
+    const { success } = rateLimit(`story-reactions:${session.user.id}`, 20, 60000)
+    if (!success) {
+      return NextResponse.json({ error: "Terlalu banyak aksi. Coba lagi dalam 1 menit." }, { status: 429 })
+    }
+
     const body = await request.json()
     const parsed = reactionSchema.safeParse(body)
     if (!parsed.success) {

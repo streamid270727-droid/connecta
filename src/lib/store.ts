@@ -11,6 +11,7 @@ export type AppView =
   | "search"
   | "settings"
   | "discover"
+  | "admin"
 
 interface ProfileViewTarget {
   userId: string

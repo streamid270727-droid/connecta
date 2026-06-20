@@ -70,48 +70,54 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
   const isOwn = currentGroup?.author.id === session?.user?.id
 
   // Mark story as viewed (once)
-  const markViewed = useCallback(async (storyId: string) => {
-    if (viewedRef.current.has(storyId)) return
-    viewedRef.current.add(storyId)
-    try {
-      const res = await fetch(`/api/stories/${storyId}/view`, { method: "POST" })
-      if (res.ok) {
-        const data = await res.json()
-        if (isOwn) setViews(data.viewCount)
+  const markViewed = useCallback(
+    async (storyId: string) => {
+      if (viewedRef.current.has(storyId)) return
+      viewedRef.current.add(storyId)
+      try {
+        const res = await fetch(`/api/stories/${storyId}/view`, { method: "POST" })
+        if (res.ok) {
+          const data = await res.json()
+          if (isOwn) setViews(data.viewCount)
+        }
+      } catch (e) {
+        console.error("Failed to track story view:", e)
       }
-    } catch (e) {
-      console.error("Failed to track story view:", e)
-    }
-  }, [isOwn])
+    },
+    [isOwn]
+  )
 
-  const handleReaction = useCallback(async (emoji: string) => {
-    if (!currentStory || isOwn) return
-    const prev = myReaction
-    const prevCount = reactionCount
-    setMyReaction(prev === emoji ? null : emoji)
-    if (prev === emoji) {
-      setReactionCount((c) => c !== null ? Math.max(0, c - 1) : null)
-    } else if (!prev) {
-      setReactionCount((c) => c !== null ? c + 1 : 1)
-    }
-    try {
-      const res = await fetch(`/api/stories/${currentStory.id}/react`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emoji }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setMyReaction(data.action === "removed" ? null : data.emoji)
-      } else {
+  const handleReaction = useCallback(
+    async (emoji: string) => {
+      if (!currentStory || isOwn) return
+      const prev = myReaction
+      const prevCount = reactionCount
+      setMyReaction(prev === emoji ? null : emoji)
+      if (prev === emoji) {
+        setReactionCount((c) => (c !== null ? Math.max(0, c - 1) : null))
+      } else if (!prev) {
+        setReactionCount((c) => (c !== null ? c + 1 : 1))
+      }
+      try {
+        const res = await fetch(`/api/stories/${currentStory.id}/react`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ emoji }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setMyReaction(data.action === "removed" ? null : data.emoji)
+        } else {
+          setMyReaction(prev)
+          setReactionCount(prevCount)
+        }
+      } catch {
         setMyReaction(prev)
         setReactionCount(prevCount)
       }
-    } catch {
-      setMyReaction(prev)
-      setReactionCount(prevCount)
-    }
-  }, [currentStory, isOwn, myReaction, reactionCount])
+    },
+    [currentStory, isOwn, myReaction, reactionCount]
+  )
 
   const handleSendReply = useCallback(async () => {
     if (!currentStory || !replyText.trim() || sendingReply) return
@@ -235,11 +241,11 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
   }
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center animate-in fade-in duration-200">
+    <div className="animate-in fade-in fixed inset-0 z-[100] flex items-center justify-center bg-black/95 duration-200">
       {/* Close button */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-50 size-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+        className="absolute top-4 right-4 z-50 flex size-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
         aria-label="Tutup"
       >
         <X className="size-5" />
@@ -249,13 +255,13 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
       <button
         onClick={goPrev}
         disabled={groupIdx === 0 && storyIdx === 0}
-        className="absolute left-0 top-0 bottom-0 w-1/3 z-20 disabled:cursor-default group"
+        className="group absolute top-0 bottom-0 left-0 z-20 w-1/3 disabled:cursor-default"
         aria-label="Story sebelumnya"
       >
         <ChevronLeft
           className={cn(
-            "size-8 text-white/60 absolute left-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity",
-            (groupIdx === 0 && storyIdx === 0) && "hidden"
+            "absolute top-1/2 left-4 size-8 -translate-y-1/2 text-white/60 opacity-0 transition-opacity group-hover:opacity-100",
+            groupIdx === 0 && storyIdx === 0 && "hidden"
           )}
         />
       </button>
@@ -263,44 +269,43 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
       {/* Navigation: next (right 30%) */}
       <button
         onClick={goNext}
-        className="absolute right-0 top-0 bottom-0 w-1/3 z-20 group"
+        className="group absolute top-0 right-0 bottom-0 z-20 w-1/3"
         aria-label="Story berikutnya"
       >
-        <ChevronRight className="size-8 text-white/60 absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <ChevronRight className="absolute top-1/2 right-4 size-8 -translate-y-1/2 text-white/60 opacity-0 transition-opacity group-hover:opacity-100" />
       </button>
 
       {/* Pause overlay (center) */}
       <button
         onClick={() => setPaused((p) => !p)}
-        className="absolute left-1/3 right-1/3 top-0 bottom-0 z-20 flex items-center justify-center"
+        className="absolute top-0 right-1/3 bottom-0 left-1/3 z-20 flex items-center justify-center"
         aria-label={paused ? "Lanjutkan" : "Jeda"}
       >
         {paused && (
-          <div className="size-16 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
-            <Play className="size-7 text-white fill-white ml-1" />
+          <div className="flex size-16 items-center justify-center rounded-full bg-black/50 backdrop-blur-sm">
+            <Play className="ml-1 size-7 fill-white text-white" />
           </div>
         )}
       </button>
 
       {/* Story container */}
       <div
-        className="relative w-full h-full sm:w-[420px] sm:h-[90vh] sm:rounded-2xl overflow-hidden bg-black"
+        className="relative h-full w-full overflow-hidden bg-black sm:h-[90vh] sm:w-[420px] sm:rounded-2xl"
         onClick={() => setPaused((p) => !p)}
-        onTouchStart={(e) => { touchStartY.current = e.touches[0].clientY }}
+        onTouchStart={(e) => {
+          touchStartY.current = e.touches[0].clientY
+        }}
         onTouchEnd={(e) => {
           const deltaY = e.changedTouches[0].clientY - touchStartY.current
           if (deltaY > 80) onClose()
         }}
       >
         {/* Progress bars */}
-        <div className="absolute top-0 left-0 right-0 z-30 flex gap-1 p-3">
+        <div className="absolute top-0 right-0 left-0 z-30 flex gap-1 p-3">
           {currentGroup.stories.map((_, i) => (
-            <div
-              key={i}
-              className="flex-1 h-1 rounded-full bg-white/30 overflow-hidden"
-            >
+            <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
               <div
-                className="h-full bg-white rounded-full transition-all"
+                className="h-full rounded-full bg-white transition-all"
                 style={{
                   width: i < storyIdx ? "100%" : i === storyIdx ? `${progress}%` : "0%",
                 }}
@@ -310,21 +315,26 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
         </div>
 
         {/* Author info */}
-        <div className="absolute top-6 left-0 right-0 z-30 flex items-center gap-2 px-4 pt-2">
+        <div className="absolute top-6 right-0 left-0 z-30 flex items-center gap-2 px-4 pt-2">
           <UserAvatar
             src={currentGroup.author.avatarUrl}
             name={currentGroup.author.name}
             seed={currentGroup.author.id}
             size="sm"
           />
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1">
-              <span className="text-sm font-semibold text-white truncate">
+              <span className="truncate text-sm font-semibold text-white">
                 {currentGroup.author.name}
               </span>
               {currentGroup.author.isVerified && (
                 <svg className="size-3.5 fill-sky-400 text-sky-400" viewBox="0 0 24 24">
-                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" strokeWidth="2" fill="none" />
+                  <path
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    fill="none"
+                  />
                 </svg>
               )}
             </div>
@@ -334,7 +344,7 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
           </div>
           {isOwn ? (
             <>
-              <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10 text-white text-xs">
+              <div className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-xs text-white">
                 <Eye className="size-3" />
                 {views ?? currentStory.viewCount}
               </div>
@@ -344,7 +354,7 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
                   void handleDelete()
                 }}
                 disabled={deleting}
-                className="size-8 rounded-full bg-white/10 hover:bg-red-500/80 text-white flex items-center justify-center transition-colors"
+                className="flex size-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-red-500/80"
                 aria-label="Hapus story"
               >
                 {deleting ? (
@@ -356,7 +366,7 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
             </>
           ) : null}
           {paused && (
-            <div className="size-8 rounded-full bg-white/10 text-white flex items-center justify-center">
+            <div className="flex size-8 items-center justify-center rounded-full bg-white/10 text-white">
               <Pause className="size-4" />
             </div>
           )}
@@ -367,19 +377,19 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
           <img
             src={currentStory.mediaUrl}
             alt="Story"
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
           <div
             className={cn(
-              "w-full h-full bg-gradient-to-br flex items-center justify-center p-8",
+              "flex h-full w-full items-center justify-center bg-gradient-to-br p-8",
               currentStory.bgColor || "from-rose-500 to-pink-600"
             )}
             onClick={(e) => e.stopPropagation()}
           >
             <p
-              className="text-center text-2xl sm:text-3xl font-bold whitespace-pre-wrap break-words leading-snug text-center"
+              className="text-center text-2xl leading-snug font-bold break-words whitespace-pre-wrap sm:text-3xl"
               style={{ color: currentStory.textColor || "#ffffff" }}
             >
               {currentStory.content}
@@ -389,8 +399,8 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
 
         {/* Caption overlay (if media + content) */}
         {currentStory.mediaUrl && currentStory.content && (
-          <div className="absolute bottom-16 left-0 right-0 p-4 bg-gradient-to-t from-black/70 to-transparent">
-            <p className="text-white text-sm whitespace-pre-wrap break-words">
+          <div className="absolute right-0 bottom-16 left-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+            <p className="text-sm break-words whitespace-pre-wrap text-white">
               {currentStory.content}
             </p>
           </div>
@@ -398,9 +408,9 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
 
         {/* Reaction bar + Reply input (non-own stories) */}
         {!isOwn && (
-          <div className="absolute bottom-0 left-0 right-0 z-30 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+          <div className="absolute right-0 bottom-0 left-0 z-30 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3">
             {/* Emoji reactions */}
-            <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="mb-2 flex items-center justify-center gap-2">
               {["❤️", "😂", "😮", "😢", "👍"].map((emoji) => (
                 <button
                   key={emoji}
@@ -409,18 +419,19 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
                     handleReaction(emoji)
                   }}
                   className={cn(
-                    "size-10 rounded-full flex items-center justify-center text-xl transition-all",
+                    "flex size-10 items-center justify-center rounded-full text-xl transition-all",
                     myReaction === emoji
-                      ? "bg-white/30 scale-125"
-                      : "bg-white/10 hover:bg-white/20 hover:scale-110"
+                      ? "scale-125 bg-white/30"
+                      : "bg-white/10 hover:scale-110 hover:bg-white/20"
                   )}
+                  aria-label={`Reaksi ${emoji}`}
                 >
                   {emoji}
                 </button>
               ))}
             </div>
             {reactionCount !== null && reactionCount > 0 && (
-              <p className="text-center text-xs text-white/60 mb-1">{reactionCount} reaksi</p>
+              <p className="mb-1 text-center text-xs text-white/60">{reactionCount} reaksi</p>
             )}
             {/* Reply input */}
             <div className="flex items-center gap-2">
@@ -436,7 +447,7 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
                 }}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Balas story..."
-                className="flex-1 h-10 px-4 rounded-full bg-white/15 text-white placeholder-white/50 text-sm outline-none focus:bg-white/25 transition-colors"
+                className="h-10 flex-1 rounded-full bg-white/15 px-4 text-sm text-white placeholder-white/50 transition-colors outline-none focus:bg-white/25"
               />
               <button
                 onClick={(e) => {
@@ -444,10 +455,10 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
                   handleSendReply()
                 }}
                 disabled={!replyText.trim() || sendingReply}
-                className="size-10 rounded-full bg-white/15 hover:bg-white/25 disabled:opacity-40 flex items-center justify-center transition-colors"
+                className="flex size-10 items-center justify-center rounded-full bg-white/15 transition-colors hover:bg-white/25 disabled:opacity-40"
               >
                 {sendingReply ? (
-                  <Loader2 className="size-4 text-white animate-spin" />
+                  <Loader2 className="size-4 animate-spin text-white" />
                 ) : (
                   <Send className="size-4 text-white" />
                 )}
@@ -458,10 +469,12 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
 
         {/* Group indicator dots */}
         {groups.length > 1 && (
-          <div className={cn(
-            "absolute left-1/2 -translate-x-1/2 flex gap-1.5 z-30",
-            isOwn ? "bottom-4" : "bottom-[104px]"
-          )}>
+          <div
+            className={cn(
+              "absolute left-1/2 z-30 flex -translate-x-1/2 gap-1.5",
+              isOwn ? "bottom-4" : "bottom-[104px]"
+            )}
+          >
             {groups.map((g, i) => (
               <div
                 key={g.author.id}

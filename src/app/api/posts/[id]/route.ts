@@ -3,10 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
 
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
@@ -33,10 +30,7 @@ export async function DELETE(
   }
 }
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
@@ -76,7 +70,7 @@ export async function GET(
       },
     })
     if (!post) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+      return NextResponse.json({ error: "Postingan tidak ditemukan" }, { status: 404 })
     }
     const { parseImages } = await import("@/lib/format")
     const userLike = post.likes.find((l) => l.userId === session.user.id)

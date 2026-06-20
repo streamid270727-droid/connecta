@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { rateLimit } from "@/lib/rate-limit"
 import { z } from "zod"
 
 const createStorySchema = z.object({
@@ -115,6 +116,12 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Rate limit: 5 stories per minute per user
+    const { success } = rateLimit(`stories:${session.user.id}`, 5, 60000)
+    if (!success) {
+      return NextResponse.json({ error: "Terlalu banyak story. Coba lagi dalam 1 menit." }, { status: 429 })
     }
 
     const body = await request.json()

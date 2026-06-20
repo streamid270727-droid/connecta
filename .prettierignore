@@ -1,0 +1,8 @@
+node_modules
+.next
+out
+build
+*.db
+*.db-journal
+package-lock.json
+bun.lock

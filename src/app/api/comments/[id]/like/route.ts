@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { rateLimit } from "@/lib/rate-limit"
 
 export async function POST(
   request: Request,
@@ -13,6 +14,12 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const { id } = await params
+
+    // Rate limit: 30 likes per minute per user
+    const { success } = rateLimit(`comment-likes:${session.user.id}`, 30, 60000)
+    if (!success) {
+      return NextResponse.json({ error: "Terlalu banyak aksi. Coba lagi dalam 1 menit." }, { status: 429 })
+    }
 
     const comment = await db.comment.findUnique({
       where: { id },

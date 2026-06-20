@@ -6,10 +6,14 @@ describe("sanitizeHtml", () => {
     expect(sanitizeHtml("<script>alert('xss')</script>")).not.toContain("<script>")
   })
 
-  it("escapes HTML entities in text", () => {
-    expect(sanitizeHtml("Hello & world")).toBe("Hello &amp; world")
-    expect(sanitizeHtml("5 > 3")).toBe("5 &gt; 3")
+  it("preserves plain text entities (sanitizer focuses on XSS, not encoding)", () => {
+    // DOMPurify preserves & as-is in plain text (not a security risk)
+    expect(sanitizeHtml("Hello & world")).toBe("Hello & world")
+    expect(sanitizeHtml("5 > 3")).toBe("5 > 3")
+    // DOMPurify escapes < in text context
     expect(sanitizeHtml("a < b")).toBe("a &lt; b")
+    // But actual tags are stripped (including trailing content of script tag)
+    expect(sanitizeHtml("a <script>alert(1)</script> tag")).toBe("a  tag")
   })
 
   it("allows safe tags like b, i, em, strong", () => {

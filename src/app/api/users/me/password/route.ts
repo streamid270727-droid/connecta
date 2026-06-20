@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { hash, compare } from "bcryptjs"
+import { rateLimit } from "@/lib/rate-limit"
 import { z } from "zod"
 
 const changePasswordSchema = z.object({
@@ -15,6 +16,12 @@ export async function PUT(request: Request) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Rate limit: 5 password changes per minute per user
+    const { success } = rateLimit(`password:${session.user.id}`, 5, 60000)
+    if (!success) {
+      return NextResponse.json({ error: "Terlalu banyak percobaan. Coba lagi dalam 1 menit." }, { status: 429 })
     }
 
     const body = await request.json()

@@ -2,20 +2,12 @@
 
 import { useState, useRef, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import {
-  ImagePlus,
-  Video,
-  Loader2,
-  Send,
-  X,
-  Globe,
-  Smile,
-  CheckCircle2,
-} from "lucide-react"
+import { ImagePlus, Video, Loader2, Send, X, Globe, Smile, CheckCircle2, Link2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { UserAvatar } from "@/components/common/user-avatar"
+import { OptimizedImage } from "@/components/common/optimized-image"
 import { useToast } from "@/hooks/use-toast"
 import { useAppStore } from "@/lib/store"
 import { getYouTubeId, getVimeoId } from "@/lib/format"
@@ -28,6 +20,14 @@ import {
 } from "@/components/ui/dialog"
 import type { FeedPost } from "@/components/feed/post-card"
 
+interface LinkPreview {
+  title: string
+  description: string
+  image: string | null
+  url: string
+  siteName: string | null
+}
+
 export function PostComposerDialog() {
   const { data: session } = useSession()
   const { toast } = useToast()
@@ -38,6 +38,8 @@ export function PostComposerDialog() {
   const [loading, setLoading] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [showVideoInput, setShowVideoInput] = useState(false)
+  const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null)
+  const [loadingPreview, setLoadingPreview] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -47,6 +49,59 @@ export function PostComposerDialog() {
     }
   }, [composerOpen])
 
+  // Auto-fetch link preview when URL is detected in content
+  useEffect(() => {
+    if (!content.trim()) {
+      setLinkPreview(null)
+      return
+    }
+
+    // Extract first URL from content
+    const urlMatch = content.match(/(https?:\/\/[^\s]+)/)
+    if (!urlMatch) {
+      setLinkPreview(null)
+      return
+    }
+
+    const url = urlMatch[1]
+
+    // Don't fetch if it's a YouTube/Vimeo URL (handled separately)
+    if (getYouTubeId(url) || getVimeoId(url)) {
+      setLinkPreview(null)
+      return
+    }
+
+    // Don't fetch if preview already exists for this URL
+    if (linkPreview?.url === url) return
+
+    const controller = new AbortController()
+    setLoadingPreview(true)
+
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/link-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+          signal: controller.signal,
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setLinkPreview(data.preview)
+        }
+      } catch {
+        // Ignore abort errors
+      } finally {
+        setLoadingPreview(false)
+      }
+    }, 1000) // Debounce 1 second
+
+    return () => {
+      clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [content, linkPreview?.url])
+
   const resetState = () => {
     setContent("")
     setImages([])
@@ -54,6 +109,8 @@ export function PostComposerDialog() {
     setShowVideoInput(false)
     setLoading(false)
     setUploadingImage(false)
+    setLinkPreview(null)
+    setLoadingPreview(false)
   }
 
   const handleClose = (open: boolean) => {
@@ -129,6 +186,7 @@ export function PostComposerDialog() {
           content: content.trim(),
           images,
           videoUrl: videoUrl.trim() || null,
+          linkPreview: linkPreview || null,
         }),
       })
       if (!res.ok) {
@@ -151,17 +209,15 @@ export function PostComposerDialog() {
 
   return (
     <Dialog open={composerOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
-        <DialogHeader className="p-4 border-b">
-          <DialogTitle className="text-center text-lg font-bold">
-            Buat Postingan
-          </DialogTitle>
-          <DialogDescription className="text-center text-xs sr-only">
+      <DialogContent className="max-w-lg gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b p-4">
+          <DialogTitle className="text-center text-lg font-bold">Buat Postingan</DialogTitle>
+          <DialogDescription className="sr-only text-center text-xs">
             Bagikan pembaruan teks, foto, atau video dengan teman Anda.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="p-4 space-y-3">
+        <div className="space-y-3 p-4">
           {/* User info */}
           <div className="flex items-center gap-2.5">
             <UserAvatar
@@ -172,12 +228,12 @@ export function PostComposerDialog() {
             />
             <div className="min-w-0">
               <div className="flex items-center gap-1">
-                <span className="font-semibold text-sm truncate">{session.user.name}</span>
+                <span className="truncate text-sm font-semibold">{session.user.name}</span>
                 {session.user.isVerified && (
-                  <CheckCircle2 className="size-3.5 fill-primary text-primary-foreground" />
+                  <CheckCircle2 className="fill-primary text-primary-foreground size-3.5" />
                 )}
               </div>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <div className="text-muted-foreground flex items-center gap-1 text-xs">
                 <Globe className="size-3" />
                 <span>Publik</span>
               </div>
@@ -190,31 +246,74 @@ export function PostComposerDialog() {
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder={`Apa yang Anda pikirkan, ${session.user.name?.split(" ")[0]}?`}
-            className="min-h-32 max-h-64 resize-none text-base border-0 focus-visible:ring-0 p-0 placeholder:text-muted-foreground/70"
+            className="placeholder:text-muted-foreground/70 max-h-64 min-h-32 resize-none border-0 p-0 text-base focus-visible:ring-0"
             maxLength={5000}
           />
 
           {/* Character count */}
           {content.length > 0 && (
-            <div className="text-right text-xs text-muted-foreground">
-              {content.length}/5000
-            </div>
+            <div className="text-muted-foreground text-right text-xs">{content.length}/5000</div>
           )}
 
           {/* Image previews */}
           {images.length > 0 && (
             <div className="grid grid-cols-2 gap-2">
               {images.map((img, i) => (
-                <div key={i} className="relative group aspect-square rounded-lg overflow-hidden bg-muted">
-                  <img src={img} alt="" className="w-full h-full object-cover" />
+                <div
+                  key={i}
+                  className="group bg-muted relative aspect-square overflow-hidden rounded-lg"
+                >
+                  <OptimizedImage src={img} alt="" fill className="object-cover" />
                   <button
                     onClick={() => removeImage(i)}
-                    className="absolute top-1 right-1 size-6 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black/90"
+                    className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/90"
+                    aria-label="Hapus gambar"
                   >
                     <X className="size-3.5" />
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Link preview */}
+          {loadingPreview && (
+            <div className="bg-muted/30 text-muted-foreground flex items-center gap-2 rounded-lg border p-3 text-sm">
+              <Loader2 className="size-4 animate-spin" />
+              <span>Mengambil pratinjau link...</span>
+            </div>
+          )}
+          {linkPreview && !loadingPreview && (
+            <div className="bg-muted/30 relative overflow-hidden rounded-lg border">
+              {linkPreview.image && (
+                <img
+                  src={linkPreview.image}
+                  alt={linkPreview.title}
+                  className="h-32 w-full object-cover"
+                  onError={(e) => {
+                    ;(e.target as HTMLImageElement).style.display = "none"
+                  }}
+                />
+              )}
+              <div className="p-3">
+                <div className="text-muted-foreground mb-1 flex items-center gap-1.5 text-[11px]">
+                  <Link2 className="size-3" />
+                  <span>{linkPreview.siteName || new URL(linkPreview.url).hostname}</span>
+                </div>
+                <p className="line-clamp-2 text-sm font-medium">{linkPreview.title}</p>
+                {linkPreview.description && (
+                  <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
+                    {linkPreview.description}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setLinkPreview(null)}
+                className="absolute top-2 right-2 flex size-6 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/90"
+                aria-label="Hapus pratinjau link"
+              >
+                <X className="size-3.5" />
+              </button>
             </div>
           )}
 
@@ -235,12 +334,13 @@ export function PostComposerDialog() {
                     setVideoUrl("")
                     setShowVideoInput(false)
                   }}
+                  aria-label="Tutup input video"
                 >
                   <X className="size-4" />
                 </Button>
               </div>
               {videoUrl && (getYouTubeId(videoUrl) || getVimeoId(videoUrl)) && (
-                <div className="text-xs text-emerald-600 flex items-center gap-1">
+                <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 className="size-3.5" />
                   Video valid dan akan diembed
                 </div>
@@ -250,9 +350,9 @@ export function PostComposerDialog() {
         </div>
 
         {/* Actions */}
-        <div className="px-4 pb-4 space-y-3">
-          <div className="flex items-center gap-2 p-2 rounded-lg border">
-            <span className="text-xs text-muted-foreground flex-1">Tambahkan ke postingan</span>
+        <div className="space-y-3 px-4 pb-4">
+          <div className="flex items-center gap-2 rounded-lg border p-2">
+            <span className="text-muted-foreground flex-1 text-xs">Tambahkan ke postingan</span>
             <input
               ref={fileInputRef}
               type="file"
@@ -264,9 +364,10 @@ export function PostComposerDialog() {
             <Button
               variant="ghost"
               size="icon"
-              className="size-8 text-emerald-600"
+              className="size-8 text-emerald-600 dark:text-emerald-400"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingImage || images.length >= 4}
+              aria-label="Tambah gambar"
             >
               {uploadingImage ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -277,19 +378,29 @@ export function PostComposerDialog() {
             <Button
               variant="ghost"
               size="icon"
-              className="size-8 text-rose-600"
+              className="size-8 text-rose-600 dark:text-rose-400"
               onClick={() => setShowVideoInput((v) => !v)}
+              aria-label="Tambah video"
             >
               <Video className="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="size-8 text-amber-600">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-amber-600 dark:text-amber-400"
+              aria-label="Pilih emoji"
+            >
               <Smile className="size-4" />
             </Button>
           </div>
 
           <Button
             onClick={submit}
-            disabled={loading || uploadingImage || (!content.trim() && images.length === 0 && !videoUrl.trim())}
+            disabled={
+              loading ||
+              uploadingImage ||
+              (!content.trim() && images.length === 0 && !videoUrl.trim())
+            }
             className="w-full"
           >
             {loading ? (

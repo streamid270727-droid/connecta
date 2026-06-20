@@ -34,7 +34,7 @@ import { useAppStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
 import { getSocket } from "@/lib/socket"
 import { cn } from "@/lib/utils"
-import { formatRelativeTime, formatTime, formatShortDate } from "@/lib/format"
+import { formatRelativeTime, formatTime } from "@/lib/format"
 import {
   ArrowLeft,
   CheckCheck,
@@ -53,111 +53,17 @@ import {
   Users,
   Info,
 } from "lucide-react"
-
-// ===== Types =====
-interface ChatUser {
-  id: string
-  name: string
-  username: string
-  avatarUrl: string | null
-  isVerified: boolean
-}
-
-interface Conversation {
-  id: string
-  otherUser: ChatUser
-  lastMessage: {
-    id: string
-    content: string
-    createdAt: string
-    senderId: string
-    isRead: boolean
-  } | null
-  unreadCount: number
-  updatedAt: string
-}
-
-interface ChatMessage {
-  id: string
-  conversationId: string
-  senderId: string
-  recipientId: string
-  content: string
-  isRead: boolean
-  createdAt: string
-  sender: ChatUser
-}
-
-interface IncomingSocketMessage {
-  id: string
-  conversationId: string
-  senderId: string
-  senderName?: string
-  content: string
-  createdAt: string
-}
-
-interface TypingPayload {
-  conversationId: string
-  userId?: string
-  isTyping?: boolean
-}
-
-interface ReadPayload {
-  conversationId: string
-  readBy: string
-}
-
-interface OnlineAck {
-  userId: string
-  isOnline: boolean
-}
-
-interface FriendForCompose {
-  id: string
-  name: string
-  username: string
-  avatarUrl: string | null
-  isVerified: boolean
-}
-
-// ===== Helpers =====
-function startOfDay(d: Date): number {
-  const x = new Date(d)
-  x.setHours(0, 0, 0, 0)
-  return x.getTime()
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return startOfDay(a) === startOfDay(b)
-}
-
-function isYesterday(a: Date, b: Date): boolean {
-  const yesterday = new Date(b)
-  yesterday.setDate(yesterday.getDate() - 1)
-  return isSameDay(a, yesterday)
-}
-
-function dateLabel(d: Date): string {
-  const now = new Date()
-  if (isSameDay(d, now)) return "Hari ini"
-  if (isYesterday(d, now)) return "Kemarin"
-  // Same year -> omit year
-  if (d.getFullYear() === now.getFullYear()) {
-    return d.toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "long",
-    })
-  }
-  return formatShortDate(d)
-}
-
-function previewText(conv: Conversation, currentUserId: string): string {
-  if (!conv.lastMessage) return "Mulai percakapan"
-  const prefix =
-    conv.lastMessage.senderId === currentUserId ? "Anda: " : ""
-  return prefix + conv.lastMessage.content
-}
+import type {
+  ChatUser,
+  Conversation,
+  ChatMessage,
+  IncomingSocketMessage,
+  TypingPayload,
+  ReadPayload,
+  OnlineAck,
+  FriendForCompose,
+} from "./types"
+import { dateLabel, previewText, isSameDay } from "./helpers"
 
 // ===== Sub-component: Typing indicator (three bouncing dots) =====
 function TypingDots() {

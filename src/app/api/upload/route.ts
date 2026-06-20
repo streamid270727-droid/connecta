@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { writeFile, mkdir } from "fs/promises"
 import path from "path"
 import { randomUUID } from "crypto"
+import { rateLimit } from "@/lib/rate-limit"
 
 const MAX_SIZE = 4 * 1024 * 1024 // 4MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
@@ -13,6 +14,12 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Rate limit: 10 uploads per minute per user
+    const { success } = rateLimit(`upload:${session.user.id}`, 10, 60000)
+    if (!success) {
+      return NextResponse.json({ error: "Terlalu banyak upload. Coba lagi dalam 1 menit." }, { status: 429 })
     }
 
     const formData = await request.formData()

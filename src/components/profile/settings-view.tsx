@@ -23,6 +23,7 @@ import {
   Moon,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { LanguageSwitcher } from "@/components/common/language-switcher"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -32,39 +33,31 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { UserAvatar } from "@/components/common/user-avatar"
+import { OptimizedImage } from "@/components/common/optimized-image"
 import { useToast } from "@/hooks/use-toast"
 import { useTheme } from "next-themes"
 import { formatShortDate, getCoverGradient } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useAppStore } from "@/lib/store"
-
-interface SettingsUser {
-  id: string
-  name: string
-  username: string
-  email: string | null
-  avatarUrl: string | null
-  coverUrl: string | null
-  bio: string | null
-  location: string | null
-  birthDate: string | null
-  phone: string | null
-  isPrivate: boolean
-  isVerified: boolean
-  createdAt: string
-}
+import { useUserSettings } from "@/hooks/api/use-user-settings"
+import { useQueryClient } from "@tanstack/react-query"
+import type { SettingsUser } from "./types"
 
 export function SettingsView() {
   const { data: session, update: updateSession } = useSession()
   const { theme, setTheme } = useTheme()
   const { openProfile, setUserProfile } = useAppStore()
   const { toast } = useToast()
+  const qc = useQueryClient()
 
-  const [user, setUser] = useState<SettingsUser | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [mounted, setMounted] = useState(false)
+  const userQuery = useUserSettings()
+  const user = userQuery.data ?? null
+  const setUser = (updater: (prev: SettingsUser | null) => SettingsUser | null) => {
+    qc.setQueryData(["userSettings"], (old: SettingsUser | undefined) => {
+      return updater(old ?? null) ?? undefined
+    })
+  }
 
-  // Form fields (Account section)
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
   const [birthDate, setBirthDate] = useState("")
@@ -77,36 +70,23 @@ export function SettingsView() {
   const [savingPrivacy, setSavingPrivacy] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
   useEffect(() => {
-    void loadUser()
-
-    async function loadUser() {
-      setLoading(true)
-      try {
-        const res = await fetch("/api/users/me")
-        if (!res.ok) throw new Error("Gagal memuat pengguna")
-        const data = await res.json()
-        const u: SettingsUser = data.user
-        setUser(u)
-        setName(u.name || "")
-        setPhone(u.phone || "")
-        setBirthDate(u.birthDate ? u.birthDate.slice(0, 10) : "")
-        setLocation(u.location || "")
-        setBio(u.bio || "")
-        setIsPrivate(u.isPrivate)
-        setAvatarUrl(u.avatarUrl || "")
-      } catch {
-        toast({ title: "Gagal memuat pengaturan", variant: "destructive" })
-      } finally {
-        setLoading(false)
-      }
+    if (user) {
+      setName(user.name || "")
+      setPhone(user.phone || "")
+      setBirthDate(user.birthDate ? user.birthDate.slice(0, 10) : "")
+      setLocation(user.location || "")
+      setBio(user.bio || "")
+      setIsPrivate(user.isPrivate)
+      setAvatarUrl(user.avatarUrl || "")
     }
-  }, [])
+  }, [user])
 
   const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -252,26 +232,24 @@ export function SettingsView() {
     }
   }
 
-  if (loading || !user) {
+  if (userQuery.isLoading || !user) {
     return (
-      <div className="px-4 sm:px-6 py-4 max-w-3xl mx-auto">
+      <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
         <SettingsSkeleton />
       </div>
     )
   }
 
   return (
-    <div className="px-4 sm:px-6 py-4 max-w-3xl mx-auto">
+    <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
       {/* Page header */}
-      <div className="flex items-center gap-2 mb-1">
-        <div className="size-9 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center">
+      <div className="mb-1 flex items-center gap-2">
+        <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-pink-600">
           <UserIcon className="size-5 text-white" />
         </div>
         <div>
           <h1 className="text-xl font-bold">Pengaturan</h1>
-          <p className="text-xs text-muted-foreground">
-            Kelola akun, privasi, dan preferensi Anda
-          </p>
+          <p className="text-muted-foreground text-xs">Kelola akun, privasi, dan preferensi Anda</p>
         </div>
       </div>
 
@@ -279,42 +257,28 @@ export function SettingsView() {
       <Card className="mt-4 overflow-hidden py-0">
         <div className="relative h-20">
           {user.coverUrl ? (
-            <img
-              src={user.coverUrl}
-              alt="Cover"
-              className="w-full h-full object-cover"
-            />
+            <OptimizedImage src={user.coverUrl} alt="Cover" fill className="object-cover" />
           ) : (
-            <div
-              className={cn(
-                "w-full h-full bg-gradient-to-br",
-                getCoverGradient(user.id)
-              )}
-            />
+            <div className={cn("h-full w-full bg-gradient-to-br", getCoverGradient(user.id))} />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-          <label className="absolute top-2 right-2 size-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center cursor-pointer transition-colors">
+          <label className="absolute top-2 right-2 flex size-8 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60">
             <Camera className="size-4" />
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleCoverUpload}
-            />
+            <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} />
           </label>
         </div>
-        <CardContent className="pt-0 pb-4 px-4 relative">
-          <div className="flex items-end gap-3 -mt-10">
+        <CardContent className="relative px-4 pt-0 pb-4">
+          <div className="-mt-10 flex items-end gap-3">
             <div className="relative">
               <UserAvatar
                 src={avatarUrl}
                 name={user.name}
                 seed={user.id}
                 size="xl"
-                className="ring-4 ring-background shadow-md"
+                className="ring-background shadow-md ring-4"
               />
               <label
-                className="absolute bottom-0 right-0 size-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md hover:bg-primary/90 transition-colors cursor-pointer"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 absolute right-0 bottom-0 flex size-7 cursor-pointer items-center justify-center rounded-full shadow-md transition-colors"
                 title="Ubah foto profil"
               >
                 {uploadingAvatar ? (
@@ -331,14 +295,14 @@ export function SettingsView() {
                 />
               </label>
             </div>
-            <div className="flex-1 min-w-0 mb-1">
+            <div className="mb-1 min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <span className="font-semibold truncate">{user.name}</span>
+                <span className="truncate font-semibold">{user.name}</span>
                 {user.isVerified && (
-                  <CheckCircle2 className="size-4 fill-primary text-primary-foreground shrink-0" />
+                  <CheckCircle2 className="fill-primary text-primary-foreground size-4 shrink-0" />
                 )}
               </div>
-              <div className="text-xs text-muted-foreground truncate">
+              <div className="text-muted-foreground truncate text-xs">
                 @{user.username} · Bergabung {formatShortDate(user.createdAt)}
               </div>
             </div>
@@ -355,12 +319,12 @@ export function SettingsView() {
       </Card>
 
       {/* Sections grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Akun */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <UserIcon className="size-4 text-primary" />
+              <UserIcon className="text-primary size-4" />
               Akun
             </CardTitle>
             <CardDescription>Informasi dasar akun Anda</CardDescription>
@@ -377,7 +341,7 @@ export function SettingsView() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="set-email" className="flex items-center gap-1.5">
-                <Mail className="size-3.5 text-muted-foreground" />
+                <Mail className="text-muted-foreground size-3.5" />
                 Email
               </Label>
               <Input
@@ -387,14 +351,12 @@ export function SettingsView() {
                 disabled
                 className="bg-muted/50 text-muted-foreground"
               />
-              <p className="text-[11px] text-muted-foreground">
-                Email tidak dapat diubah.
-              </p>
+              <p className="text-muted-foreground text-[11px]">Email tidak dapat diubah.</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="set-phone" className="flex items-center gap-1.5">
-                  <Phone className="size-3.5 text-muted-foreground" />
+                  <Phone className="text-muted-foreground size-3.5" />
                   Telepon
                 </Label>
                 <Input
@@ -407,7 +369,7 @@ export function SettingsView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="set-birth" className="flex items-center gap-1.5">
-                  <Cake className="size-3.5 text-muted-foreground" />
+                  <Cake className="text-muted-foreground size-3.5" />
                   Tanggal Lahir
                 </Label>
                 <Input
@@ -420,7 +382,7 @@ export function SettingsView() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="set-location" className="flex items-center gap-1.5">
-                <MapPin className="size-3.5 text-muted-foreground" />
+                <MapPin className="text-muted-foreground size-3.5" />
                 Lokasi
               </Label>
               <Input
@@ -441,11 +403,7 @@ export function SettingsView() {
                 rows={3}
               />
             </div>
-            <Button
-              onClick={saveAccount}
-              disabled={savingAccount}
-              className="w-full"
-            >
+            <Button onClick={saveAccount} disabled={savingAccount} className="w-full">
               {savingAccount ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
@@ -466,24 +424,24 @@ export function SettingsView() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Lock className="size-4 text-primary" />
+                <Lock className="text-primary size-4" />
                 Privasi
               </CardTitle>
               <CardDescription>Kontrol siapa yang bisa melihat konten Anda</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center justify-between gap-3 p-3 rounded-lg border">
+              <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
                 <div className="flex items-start gap-2.5">
                   {isPrivate ? (
-                    <Lock className="size-4 text-primary mt-0.5" />
+                    <Lock className="text-primary mt-0.5 size-4" />
                   ) : (
-                    <Globe className="size-4 text-primary mt-0.5" />
+                    <Globe className="text-primary mt-0.5 size-4" />
                   )}
                   <div>
                     <div className="text-sm font-medium">
                       Akun {isPrivate ? "Privat" : "Publik"}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-muted-foreground text-xs">
                       {isPrivate
                         ? "Hanya teman yang bisa melihat postingan Anda."
                         : "Semua orang bisa melihat postingan Anda."}
@@ -500,7 +458,7 @@ export function SettingsView() {
                 />
               </div>
               {savingPrivacy && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="text-muted-foreground flex items-center gap-2 text-xs">
                   <Loader2 className="size-3 animate-spin" />
                   Menyimpan...
                 </div>
@@ -512,7 +470,7 @@ export function SettingsView() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Palette className="size-4 text-primary" />
+                <Palette className="text-primary size-4" />
                 Tema
               </CardTitle>
               <CardDescription>Tampilan terang atau gelap</CardDescription>
@@ -522,7 +480,7 @@ export function SettingsView() {
                 <button
                   onClick={() => setTheme("light")}
                   className={cn(
-                    "flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all",
+                    "flex flex-col items-center gap-2 rounded-lg border-2 p-3 transition-all",
                     mounted && theme === "light"
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-primary/40"
@@ -534,7 +492,7 @@ export function SettingsView() {
                 <button
                   onClick={() => setTheme("dark")}
                   className={cn(
-                    "flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all",
+                    "flex flex-col items-center gap-2 rounded-lg border-2 p-3 transition-all",
                     mounted && theme === "dark"
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-primary/40"
@@ -544,7 +502,7 @@ export function SettingsView() {
                   <span className="text-sm font-medium">Gelap</span>
                 </button>
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-muted-foreground text-[11px]">
                 Tema juga dapat diubah dari ikon di header.
               </p>
             </CardContent>
@@ -554,7 +512,7 @@ export function SettingsView() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Shield className="size-4 text-primary" />
+                <Shield className="text-primary size-4" />
                 Keamanan
               </CardTitle>
               <CardDescription>Lindungi akun Anda</CardDescription>
@@ -562,8 +520,8 @@ export function SettingsView() {
             <CardContent className="space-y-3">
               <ChangePasswordButton />
               {user.isVerified ? (
-                <div className="flex items-center gap-2 p-3 rounded-lg border bg-primary/5">
-                  <CheckCircle2 className="size-4 text-primary shrink-0" />
+                <div className="bg-primary/5 flex items-center gap-2 rounded-lg border p-3">
+                  <CheckCircle2 className="text-primary size-4 shrink-0" />
                   <div className="text-xs">
                     <span className="font-medium">Akun terverifikasi</span>
                     <span className="text-muted-foreground"> — identitas dikonfirmasi.</span>
@@ -578,45 +536,33 @@ export function SettingsView() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <LogOut className="size-4 text-primary" />
+              <LogOut className="text-primary size-4" />
               Sesi
             </CardTitle>
             <CardDescription>Informasi sesi login saat ini</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center gap-3 p-3 rounded-lg border">
-              <UserAvatar
-                src={user.avatarUrl}
-                name={user.name}
-                seed={user.id}
-                size="lg"
-              />
+            <div className="flex items-center gap-3 rounded-lg border p-3">
+              <UserAvatar src={user.avatarUrl} name={user.name} seed={user.id} size="lg" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-medium truncate">{user.name}</span>
+                  <span className="truncate font-medium">{user.name}</span>
                   {user.isVerified && (
-                    <CheckCircle2 className="size-3.5 fill-primary text-primary-foreground shrink-0" />
+                    <CheckCircle2 className="fill-primary text-primary-foreground size-3.5 shrink-0" />
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {user.email}
-                </div>
+                <div className="text-muted-foreground truncate text-xs">{user.email}</div>
                 <Badge variant="secondary" className="mt-1">
                   Sesi aktif
                 </Badge>
               </div>
-              <Button
-                variant="destructive"
-                onClick={() => signOut({ callbackUrl: "/" })}
-              >
+              <Button variant="destructive" onClick={() => signOut({ callbackUrl: "/" })}>
                 <LogOut className="size-4" />
                 Keluar
               </Button>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              {session?.user
-                ? "Anda akan keluar dari semua sesi di perangkat ini."
-                : ""}
+            <p className="text-muted-foreground text-[11px]">
+              {session?.user ? "Anda akan keluar dari semua sesi di perangkat ini." : ""}
             </p>
           </CardContent>
         </Card>
@@ -627,22 +573,13 @@ export function SettingsView() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Languages className="size-4 text-primary" />
+              <Languages className="text-primary size-4" />
               Bahasa
             </CardTitle>
             <CardDescription>Pilih bahasa antarmuka</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between gap-3 p-3 rounded-lg border">
-              <div className="flex items-center gap-2.5">
-                <span className="text-xl">🇮🇩</span>
-                <div>
-                  <div className="text-sm font-medium">Bahasa Indonesia</div>
-                  <div className="text-xs text-muted-foreground">Default</div>
-                </div>
-              </div>
-              <Badge variant="secondary">Aktif</Badge>
-            </div>
+            <LanguageSwitcher />
           </CardContent>
         </Card>
 
@@ -650,7 +587,7 @@ export function SettingsView() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Info className="size-4 text-primary" />
+              <Info className="text-primary size-4" />
               Tentang
             </CardTitle>
             <CardDescription>Informasi aplikasi</CardDescription>
@@ -666,11 +603,9 @@ export function SettingsView() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Build</span>
-              <span className="font-medium">
-                {new Date().getFullYear()}
-              </span>
+              <span className="font-medium">{new Date().getFullYear()}</span>
             </div>
-            <div className="pt-2 border-t mt-2 text-xs text-muted-foreground">
+            <div className="text-muted-foreground mt-2 border-t pt-2 text-xs">
               © {new Date().getFullYear()} Connecta. Semua hak dilindungi.
             </div>
           </CardContent>
@@ -692,17 +627,17 @@ function SettingsSkeleton() {
       </div>
       <Card className="overflow-hidden py-0">
         <Skeleton className="h-20 w-full rounded-none" />
-        <CardContent className="pt-0 relative">
-          <div className="flex items-end gap-3 -mt-10">
-            <Skeleton className="size-16 rounded-full ring-4 ring-background" />
-            <div className="flex-1 space-y-1.5 mb-1">
+        <CardContent className="relative pt-0">
+          <div className="-mt-10 flex items-end gap-3">
+            <Skeleton className="ring-background size-16 rounded-full ring-4" />
+            <div className="mb-1 flex-1 space-y-1.5">
               <Skeleton className="h-4 w-40" />
               <Skeleton className="h-3 w-32" />
             </div>
           </div>
         </CardContent>
       </Card>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <Card key={i}>
             <CardHeader>
@@ -768,12 +703,10 @@ function ChangePasswordButton() {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 p-3 rounded-lg border">
+      <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
         <div>
           <div className="text-sm font-medium">Kata Sandi</div>
-          <div className="text-xs text-muted-foreground">
-            Ubah kata sandi secara berkala.
-          </div>
+          <div className="text-muted-foreground text-xs">Ubah kata sandi secara berkala.</div>
         </div>
         <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
           Ubah
@@ -818,7 +751,7 @@ function ChangePasswordButton() {
               onClick={handleSubmit}
               disabled={loading || !currentPassword || !newPassword}
             >
-              {loading && <Loader2 className="size-4 mr-2 animate-spin" />}
+              {loading && <Loader2 className="mr-2 size-4 animate-spin" />}
               Simpan
             </Button>
           </div>
@@ -862,12 +795,10 @@ function DeleteAccountButton() {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5">
+      <div className="border-destructive/30 bg-destructive/5 flex items-center justify-between gap-3 rounded-lg border p-3">
         <div>
-          <div className="text-sm font-medium text-destructive">Hapus Akun</div>
-          <div className="text-xs text-muted-foreground">
-            Tindakan ini tidak dapat dibatalkan.
-          </div>
+          <div className="text-destructive text-sm font-medium">Hapus Akun</div>
+          <div className="text-muted-foreground text-xs">Tindakan ini tidak dapat dibatalkan.</div>
         </div>
         <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
           Hapus
@@ -880,7 +811,7 @@ function DeleteAccountButton() {
             <DialogTitle className="text-destructive">Hapus Akun</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Semua data Anda akan dihapus secara permanen. Ketik password untuk konfirmasi.
             </p>
             <Input
@@ -895,7 +826,7 @@ function DeleteAccountButton() {
               onClick={handleDelete}
               disabled={loading || !password}
             >
-              {loading && <Loader2 className="size-4 mr-2 animate-spin" />}
+              {loading && <Loader2 className="mr-2 size-4 animate-spin" />}
               Hapus Akun Saya
             </Button>
           </div>

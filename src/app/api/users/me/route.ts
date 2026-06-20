@@ -2,6 +2,19 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { rateLimit } from "@/lib/rate-limit"
+import { z } from "zod"
+
+const updateProfileSchema = z.object({
+  name: z.string().min(2, "Nama minimal 2 karakter").max(60).optional(),
+  bio: z.string().max(200).optional(),
+  location: z.string().max(100).optional(),
+  phone: z.string().max(30).optional(),
+  birthDate: z.string().optional().nullable(),
+  avatarUrl: z.string().optional(),
+  coverUrl: z.string().optional(),
+  isPrivate: z.boolean().optional(),
+})
 
 export async function GET() {
   try {
@@ -45,21 +58,40 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { name, bio, location, phone, birthDate, avatarUrl, coverUrl, isPrivate } = body
-
-    const data: any = {}
-    if (typeof name === "string" && name.trim().length >= 2) data.name = name.trim()
-    if (typeof bio === "string") data.bio = bio.trim().slice(0, 200) || null
-    if (typeof location === "string") data.location = location.trim().slice(0, 100) || null
-    if (typeof phone === "string") data.phone = phone.trim().slice(0, 30) || null
-    if (typeof birthDate === "string" && birthDate) {
-      const d = new Date(birthDate)
-      if (!isNaN(d.getTime())) data.birthDate = d
+    // Rate limit: 10 profile updates per minute per user
+    const { success } = rateLimit(`profile:${session.user.id}`, 10, 60000)
+    if (!success) {
+      return NextResponse.json({ error: "Terlalu banyak perubahan. Coba lagi dalam 1 menit." }, { status: 429 })
     }
-    if (typeof avatarUrl === "string") data.avatarUrl = avatarUrl || null
-    if (typeof coverUrl === "string") data.coverUrl = coverUrl || null
-    if (typeof isPrivate === "boolean") data.isPrivate = isPrivate
+
+    const body = await request.json()
+    const parsed = updateProfileSchema.safeParse(body)
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0].message },
+        { status: 400 }
+      )
+    }
+
+    const { name, bio, location, phone, birthDate, avatarUrl, coverUrl, isPrivate } = parsed.data
+
+    const data: Record<string, unknown> = {}
+    if (name !== undefined) data.name = name.trim()
+    if (bio !== undefined) data.bio = bio.trim() || null
+    if (location !== undefined) data.location = location.trim() || null
+    if (phone !== undefined) data.phone = phone.trim() || null
+    if (birthDate !== undefined) {
+      if (birthDate) {
+        const d = new Date(birthDate)
+        if (!isNaN(d.getTime())) data.birthDate = d
+      } else {
+        data.birthDate = null
+      }
+    }
+    if (avatarUrl !== undefined) data.avatarUrl = avatarUrl || null
+    if (coverUrl !== undefined) data.coverUrl = coverUrl || null
+    if (isPrivate !== undefined) data.isPrivate = isPrivate
 
     const updated = await db.user.update({
       where: { id: session.user.id },

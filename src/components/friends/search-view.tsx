@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -10,6 +11,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { useAppStore } from "@/lib/store"
 import { useToast } from "@/hooks/use-toast"
+import {
+  useSendFriendRequest,
+  useAcceptFriendRequest,
+  useFriendSuggestions,
+} from "@/hooks/api/use-friends"
 import { cn } from "@/lib/utils"
 import { formatRelativeTime, formatNumber } from "@/lib/format"
 import {
@@ -68,195 +74,105 @@ interface SearchResponse {
   error?: string
 }
 
-interface Suggestion {
-  id: string
-  name: string
-  username: string
-  avatarUrl: string | null
-  bio: string | null
-  mutualFriends: number
-}
-
 export function SearchView() {
-  const {
-    searchQuery,
-    setSearchQuery,
-    openProfile,
-    openConversation,
-  } = useAppStore()
+  const { searchQuery, setSearchQuery, openProfile, openConversation } = useAppStore()
   const { toast } = useToast()
 
   const [inputValue, setInputValue] = useState(searchQuery)
-  const [results, setResults] = useState<{ users: SearchUser[]; posts: SearchPost[] }>({
-    users: [],
-    posts: [],
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [hasSearched, setHasSearched] = useState(false)
+  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery)
   const [activeTab, setActiveTab] = useState<FilterTab>("all")
-
-  // Per-row action flags
-  const [requestingId, setRequestingId] = useState<string | null>(null)
-  // Track which user ids had a request just sent (optimistic)
   const [sentIds, setSentIds] = useState<Set<string>>(new Set())
 
-  // Suggestions for empty state
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const trimmedQuery = inputValue.trim()
+  const isSearchReady = !!debouncedQuery && debouncedQuery.trim().length >= 2
 
   // ===== Debounced search =====
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
-
-  const runSearch = useCallback(
-    async (q: string, signal: AbortSignal) => {
-      const trimmed = q.trim()
-      if (!trimmed) {
-        setResults({ users: [], posts: [] })
-        setHasSearched(false)
-        setError(null)
-        return
-      }
-      setLoading(true)
-      setError(null)
-      try {
-        const res = await fetch(
-          `/api/users/search?q=${encodeURIComponent(trimmed)}`,
-          { signal }
-        )
-        if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as SearchResponse
-          throw new Error(data.error || "Gagal mencari")
-        }
-        const data = (await res.json()) as SearchResponse
-        setResults({ users: data.users || [], posts: data.posts || [] })
-        setHasSearched(true)
-      } catch (e) {
-        if ((e as Error).name === "AbortError") return
-        setError(e instanceof Error ? e.message : "Terjadi kesalahan")
-      } finally {
-        setLoading(false)
-      }
-    },
-    []
-  )
-
-  // Sync store query → input (when external changes, e.g. header search)
   useEffect(() => {
     setInputValue(searchQuery)
   }, [searchQuery])
 
-  // Debounced effect: re-run search when inputValue changes
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    // Update store on every keystroke so other components can react
     setSearchQuery(inputValue)
 
     debounceRef.current = setTimeout(() => {
-      // Cancel any in-flight request
-      if (abortRef.current) abortRef.current.abort()
-      const controller = new AbortController()
-      abortRef.current = controller
-      void runSearch(inputValue, controller.signal)
+      setDebouncedQuery(inputValue)
     }, 300)
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [inputValue, runSearch, setSearchQuery])
+  }, [inputValue, setSearchQuery])
 
-  // Initial mount: trigger search immediately if there's a query
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const controller = new AbortController()
-      abortRef.current = controller
-      void runSearch(searchQuery, controller.signal)
-    }
-    return () => {
-      if (abortRef.current) abortRef.current.abort()
-    }
-  }, [])
-
-  // ===== Fetch suggestions for empty state =====
-  const fetchSuggestions = useCallback(async () => {
-    setSuggestionsLoading(true)
-    try {
-      const res = await fetch("/api/friends/suggestions")
-      if (res.ok) {
-        const data = await res.json()
-        setSuggestions(data.suggestions || [])
+  // ===== Search query =====
+  const {
+    data: searchResults,
+    isLoading: loading,
+    error: searchError,
+    refetch,
+  } = useQuery<SearchResponse>({
+    queryKey: ["search", debouncedQuery.trim()],
+    queryFn: async ({ signal }) => {
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(debouncedQuery.trim())}`, {
+        signal,
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as SearchResponse
+        throw new Error(data.error || "Gagal mencari")
       }
-    } catch {
-      // silent
-    } finally {
-      setSuggestionsLoading(false)
-    }
-  }, [])
+      return res.json()
+    },
+    enabled: isSearchReady,
+    staleTime: 30_000,
+  })
 
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      void fetchSuggestions()
-    }
-  }, [searchQuery, fetchSuggestions])
+  const results = searchResults
+    ? { users: searchResults.users || [], posts: searchResults.posts || [] }
+    : { users: [], posts: [] }
+  const hasSearched = isSearchReady && !loading
+  const totalResults = results.users.length + results.posts.length
+  const error = searchError instanceof Error ? searchError.message : null
+
+  // ===== Suggestions =====
+  const { data: suggestions = [], isLoading: suggestionsLoading } = useFriendSuggestions()
+
+  // ===== Mutations =====
+  const sendRequestMutation = useSendFriendRequest()
+  const acceptRequestMutation = useAcceptFriendRequest()
 
   // ===== Actions =====
-  const handleSendRequest = async (userId: string) => {
-    if (requestingId) return
-    setRequestingId(userId)
-    try {
-      const res = await fetch("/api/friends/request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recipientId: userId }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
+  const handleSendRequest = (userId: string) => {
+    if (sendRequestMutation.isPending) return
+    sendRequestMutation.mutate(userId, {
+      onSuccess: (data) => {
+        if (data.status === "friends") {
+          toast({
+            title: "Berhasil",
+            description: "Kalian kini berteman",
+          })
+        } else {
+          toast({
+            title: "Permintaan terkirim",
+            description: "Menunggu konfirmasi",
+          })
+          setSentIds((prev) => new Set(prev).add(userId))
+        }
+      },
+      onError: () => {
         toast({
           title: "Gagal",
-          description: data.error || "Coba lagi nanti",
+          description: "Coba lagi nanti",
           variant: "destructive",
         })
-      } else if (data.status === "friends") {
-        toast({
-          title: "Berhasil",
-          description: "Kalian kini berteman",
-        })
-        // Mark as friend in results
-        setResults((prev) => ({
-          ...prev,
-          users: prev.users.map((u) =>
-            u.id === userId
-              ? { ...u, isFriend: true, requestSent: false, requestReceived: false }
-              : u
-          ),
-        }))
-      } else {
-        toast({
-          title: "Permintaan terkirim",
-          description: "Menunggu konfirmasi",
-        })
-        setSentIds((prev) => new Set(prev).add(userId))
-        setResults((prev) => ({
-          ...prev,
-          users: prev.users.map((u) =>
-            u.id === userId ? { ...u, requestSent: true } : u
-          ),
-        }))
-      }
-    } catch {
-      toast({ title: "Terjadi kesalahan", variant: "destructive" })
-    } finally {
-      setRequestingId(null)
-    }
+      },
+    })
   }
 
   const handleAcceptRequest = async (userId: string) => {
-    if (requestingId) return
-    setRequestingId(userId)
+    if (acceptRequestMutation.isPending) return
     try {
-      // We need the requestId, but the search response doesn't return it.
-      // Approach: hit /api/friends/requests to find the matching request id.
       const reqRes = await fetch("/api/friends/requests")
       if (!reqRes.ok) {
         toast({ title: "Gagal", variant: "destructive" })
@@ -270,73 +186,53 @@ export function SearchView() {
         toast({ title: "Permintaan tidak ditemukan", variant: "destructive" })
         return
       }
-      const res = await fetch("/api/friends/accept", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId: matched.id }),
+      acceptRequestMutation.mutate(matched.id, {
+        onSuccess: () => {
+          toast({
+            title: "Berhasil",
+            description: "Kalian kini berteman",
+          })
+        },
+        onError: () => {
+          toast({
+            title: "Gagal",
+            description: "Coba lagi nanti",
+            variant: "destructive",
+          })
+        },
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        toast({
-          title: "Gagal",
-          description: data.error || "Coba lagi nanti",
-          variant: "destructive",
-        })
-        return
-      }
-      toast({
-        title: "Berhasil",
-        description: "Kalian kini berteman",
-      })
-      setResults((prev) => ({
-        ...prev,
-        users: prev.users.map((u) =>
-          u.id === userId
-            ? { ...u, isFriend: true, requestReceived: false }
-            : u
-        ),
-      }))
     } catch {
       toast({ title: "Terjadi kesalahan", variant: "destructive" })
-    } finally {
-      setRequestingId(null)
     }
   }
 
   const handleClear = () => {
     setInputValue("")
     setSearchQuery("")
-    setResults({ users: [], posts: [] })
-    setHasSearched(false)
-    setError(null)
+    setDebouncedQuery("")
   }
-
-  const trimmedQuery = inputValue.trim()
-  const totalResults = results.users.length + results.posts.length
 
   return (
     <div className="min-h-screen pb-8">
       {/* ===== Header ===== */}
-      <div className="px-4 sm:px-6 pt-4 pb-2">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="size-10 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-md shadow-rose-500/30">
+      <div className="px-4 pt-4 pb-2 sm:px-6">
+        <div className="mb-3 flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-md shadow-rose-500/30">
             <SearchIcon className="size-5 text-white" />
           </div>
           <div>
             <h1 className="text-xl font-bold">Cari</h1>
-            <p className="text-xs text-muted-foreground">
-              Temukan teman, username, atau postingan
-            </p>
+            <p className="text-muted-foreground text-xs">Temukan teman, username, atau postingan</p>
           </div>
         </div>
 
         {/* Search input */}
         <div className="relative">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+          <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
           <Input
             type="search"
             placeholder="Cari teman, username, atau postingan..."
-            className="pl-9 pr-10 h-11 bg-muted/60 border-transparent focus-visible:bg-background text-sm sm:text-base"
+            className="bg-muted/60 focus-visible:bg-background h-11 border-transparent pr-10 pl-9 text-sm sm:text-base"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             autoFocus
@@ -344,7 +240,7 @@ export function SearchView() {
           {inputValue && (
             <button
               onClick={handleClear}
-              className="absolute right-2 top-1/2 -translate-y-1/2 size-7 rounded-full hover:bg-accent flex items-center justify-center text-muted-foreground"
+              className="hover:bg-accent text-muted-foreground absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full"
               aria-label="Hapus pencarian"
             >
               <X className="size-4" />
@@ -354,9 +250,13 @@ export function SearchView() {
 
         {/* Filter tabs */}
         {hasSearched && (
-          <div className="flex gap-1 mt-3 p-1 bg-muted/60 rounded-xl">
+          <div className="bg-muted/60 mt-3 flex gap-1 rounded-xl p-1">
             {[
-              { value: "all" as const, label: "Semua", count: results.users.length + results.posts.length },
+              {
+                value: "all" as const,
+                label: "Semua",
+                count: results.users.length + results.posts.length,
+              },
               { value: "people" as const, label: "Pengguna", count: results.users.length },
               { value: "posts" as const, label: "Postingan", count: results.posts.length },
             ].map((tab) => (
@@ -364,7 +264,7 @@ export function SearchView() {
                 key={tab.value}
                 onClick={() => setActiveTab(tab.value)}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-all",
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all",
                   activeTab === tab.value
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -372,10 +272,14 @@ export function SearchView() {
               >
                 {tab.label}
                 {tab.count > 0 && (
-                  <span className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded-full",
-                    activeTab === tab.value ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                  )}>
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px]",
+                      activeTab === tab.value
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
                     {tab.count}
                   </span>
                 )}
@@ -386,7 +290,7 @@ export function SearchView() {
       </div>
 
       {/* ===== Body ===== */}
-      <div className="px-2 sm:px-4 py-4">
+      <div className="px-2 py-4 sm:px-4">
         {!trimmedQuery ? (
           <EmptyQueryState
             suggestions={suggestions}
@@ -397,19 +301,12 @@ export function SearchView() {
         ) : loading ? (
           <SearchLoadingSkeleton />
         ) : error ? (
-          <div className="flex flex-col items-center justify-center text-center py-16 px-6">
-            <div className="size-16 rounded-2xl bg-destructive/10 flex items-center justify-center text-destructive mb-4">
+          <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+            <div className="bg-destructive/10 text-destructive mb-4 flex size-16 items-center justify-center rounded-2xl">
               <AlertCircle className="size-8" />
             </div>
-            <p className="text-sm text-muted-foreground mb-4 max-w-sm">{error}</p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const controller = new AbortController()
-                abortRef.current = controller
-                void runSearch(inputValue, controller.signal)
-              }}
-            >
+            <p className="text-muted-foreground mb-4 max-w-sm text-sm">{error}</p>
+            <Button variant="outline" onClick={() => refetch()}>
               <RefreshCw className="size-4" />
               Coba lagi
             </Button>
@@ -421,8 +318,8 @@ export function SearchView() {
             {/* ===== Users ===== */}
             {(activeTab === "all" || activeTab === "people") && (
               <section>
-                <div className="flex items-center gap-2 mb-3 px-1">
-                  <Users className="size-4 text-muted-foreground" />
+                <div className="mb-3 flex items-center gap-2 px-1">
+                  <Users className="text-muted-foreground size-4" />
                   <h2 className="text-sm font-semibold">Pengguna</h2>
                   {results.users.length > 0 && (
                     <Badge variant="secondary" className="text-[10px]">
@@ -432,7 +329,7 @@ export function SearchView() {
                 </div>
 
                 {results.users.length === 0 ? (
-                  <p className="text-xs text-muted-foreground px-1">
+                  <p className="text-muted-foreground px-1 text-xs">
                     Tidak ada pengguna yang cocok.
                   </p>
                 ) : (
@@ -442,7 +339,7 @@ export function SearchView() {
                         key={user.id}
                         user={user}
                         sent={sentIds.has(user.id)}
-                        loading={requestingId === user.id}
+                        loading={sendRequestMutation.isPending || acceptRequestMutation.isPending}
                         onSendRequest={() => handleSendRequest(user.id)}
                         onAcceptRequest={() => handleAcceptRequest(user.id)}
                         onViewProfile={() => openProfile(user.id)}
@@ -459,8 +356,8 @@ export function SearchView() {
               <>
                 {activeTab === "all" && results.users.length > 0 && <Separator className="my-2" />}
                 <section>
-                  <div className="flex items-center gap-2 mb-3 px-1">
-                    <FileText className="size-4 text-muted-foreground" />
+                  <div className="mb-3 flex items-center gap-2 px-1">
+                    <FileText className="text-muted-foreground size-4" />
                     <h2 className="text-sm font-semibold">Postingan</h2>
                     {results.posts.length > 0 && (
                       <Badge variant="secondary" className="text-[10px]">
@@ -510,7 +407,7 @@ function UserResultRow({
   onMessage: () => void
 }) {
   return (
-    <Card className="p-3 sm:p-4 flex items-start gap-3 sm:gap-4 hover:shadow-md transition-shadow border-border/60">
+    <Card className="border-border/60 flex items-start gap-3 p-3 transition-shadow hover:shadow-md sm:gap-4 sm:p-4">
       <button
         onClick={onViewProfile}
         className="shrink-0 rounded-full"
@@ -521,42 +418,34 @@ function UserResultRow({
           name={user.name}
           seed={user.id}
           size="lg"
-          className="ring-1 ring-border"
+          className="ring-border ring-1"
         />
       </button>
 
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <button
           onClick={onViewProfile}
-          className="font-semibold text-sm sm:text-base hover:underline truncate text-left block max-w-full"
+          className="block max-w-full truncate text-left text-sm font-semibold hover:underline sm:text-base"
         >
           {user.name}
           {user.isVerified && (
-            <CheckCircle2 className="inline-block size-3.5 ml-1 text-primary align-text-bottom" />
+            <CheckCircle2 className="text-primary ml-1 inline-block size-3.5 align-text-bottom" />
           )}
         </button>
-        <div className="text-xs text-muted-foreground truncate">
-          @{user.username}
-        </div>
-        {user.bio && (
-          <p className="text-sm text-muted-foreground clamp-2 mt-1">
-            {user.bio}
-          </p>
-        )}
+        <div className="text-muted-foreground truncate text-xs">@{user.username}</div>
+        {user.bio && <p className="text-muted-foreground clamp-2 mt-1 text-sm">{user.bio}</p>}
 
-        <div className="flex items-center gap-2 mt-3 flex-wrap">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {user.isFriend ? (
             <>
-              <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+              <Badge
+                variant="secondary"
+                className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+              >
                 <UserCheck className="size-3" />
                 Teman
               </Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8"
-                onClick={onMessage}
-              >
+              <Button variant="outline" size="sm" className="h-8" onClick={onMessage}>
                 <MessageCircle className="size-3.5" />
                 Pesan
               </Button>
@@ -569,7 +458,7 @@ function UserResultRow({
           ) : user.requestReceived ? (
             <Button
               size="sm"
-              className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="h-8 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
               onClick={onAcceptRequest}
               disabled={loading}
             >
@@ -581,12 +470,7 @@ function UserResultRow({
               Terima
             </Button>
           ) : (
-            <Button
-              size="sm"
-              className="h-8"
-              onClick={onSendRequest}
-              disabled={loading}
-            >
+            <Button size="sm" className="h-8" onClick={onSendRequest} disabled={loading}>
               {loading ? (
                 <Loader2 className="size-3.5 animate-spin" />
               ) : (
@@ -615,11 +499,11 @@ function PostResultCard({
 }) {
   return (
     <Card
-      className="p-3 sm:p-4 hover:shadow-md transition-shadow cursor-pointer border-border/60 group"
+      className="border-border/60 group cursor-pointer p-3 transition-shadow hover:shadow-md sm:p-4"
       onClick={onViewAuthor}
     >
       {/* Author row */}
-      <div className="flex items-center gap-2.5 mb-2">
+      <div className="mb-2 flex items-center gap-2.5">
         <button
           onClick={(e) => {
             e.stopPropagation()
@@ -641,14 +525,14 @@ function PostResultCard({
               e.stopPropagation()
               onViewAuthor()
             }}
-            className="font-medium text-sm hover:underline truncate block max-w-full text-left"
+            className="block max-w-full truncate text-left text-sm font-medium hover:underline"
           >
             {post.author.name}
             {post.author.isVerified && (
-              <CheckCircle2 className="inline-block size-3 ml-0.5 text-primary align-text-bottom" />
+              <CheckCircle2 className="text-primary ml-0.5 inline-block size-3 align-text-bottom" />
             )}
           </button>
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-muted-foreground text-[11px]">
             @{post.author.username} · {formatRelativeTime(post.createdAt)}
           </div>
         </div>
@@ -656,14 +540,14 @@ function PostResultCard({
 
       {/* Content (clamp 3) */}
       <p
-        className="text-sm text-foreground/90 clamp-3 leading-relaxed"
+        className="text-foreground/90 clamp-3 text-sm leading-relaxed"
         dangerouslySetInnerHTML={{
           __html: highlightQuery(escapeHtml(post.content), query),
         }}
       />
 
       {/* Stats */}
-      <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+      <div className="text-muted-foreground mt-3 flex items-center gap-4 text-xs">
         <span className="flex items-center gap-1">
           <Heart className="size-3.5" />
           {formatNumber(post._count.likes)}
@@ -686,38 +570,36 @@ function EmptyQueryState({
   onPick,
   onViewProfile,
 }: {
-  suggestions: Suggestion[]
+  suggestions: {
+    id: string
+    name: string
+    username: string
+    avatarUrl: string | null
+    bio: string | null
+    mutualFriends: number
+  }[]
   suggestionsLoading: boolean
   onPick: (name: string) => void
   onViewProfile: (id: string) => void
 }) {
-  const popularTags = [
-    "Teman",
-    "Connecta",
-    "Sapaan",
-    "Halo",
-    "Selamat",
-  ]
+  const popularTags = ["Teman", "Connecta", "Sapaan", "Halo", "Selamat"]
 
   return (
     <div className="py-6">
       {/* Hero */}
-      <div className="flex flex-col items-center text-center py-8 px-4 mb-4">
-        <div className="size-20 rounded-2xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 flex items-center justify-center text-primary mb-4">
+      <div className="mb-4 flex flex-col items-center px-4 py-8 text-center">
+        <div className="text-primary mb-4 flex size-20 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500/10 to-pink-500/10">
           <SearchIcon className="size-10" />
         </div>
-        <h2 className="font-semibold text-lg mb-1">
-          Cari di Connecta
-        </h2>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          Cari teman, username, atau postingan untuk menemukan orang dan
-          konten yang Anda cari.
+        <h2 className="mb-1 text-lg font-semibold">Cari di Connecta</h2>
+        <p className="text-muted-foreground max-w-sm text-sm">
+          Cari teman, username, atau postingan untuk menemukan orang dan konten yang Anda cari.
         </p>
       </div>
 
       {/* Popular search tags */}
       <div className="mb-8">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+        <h3 className="text-muted-foreground mb-2 px-1 text-xs font-semibold tracking-wide uppercase">
           Pencarian populer
         </h3>
         <div className="flex flex-wrap gap-2">
@@ -725,7 +607,7 @@ function EmptyQueryState({
             <button
               key={tag}
               onClick={() => onPick(tag)}
-              className="px-3 py-1.5 rounded-full bg-muted hover:bg-accent text-sm transition-colors"
+              className="bg-muted hover:bg-accent rounded-full px-3 py-1.5 text-sm transition-colors"
             >
               {tag}
             </button>
@@ -735,8 +617,8 @@ function EmptyQueryState({
 
       {/* Suggestions (people you may know) */}
       <div>
-        <div className="flex items-center gap-2 mb-3 px-1">
-          <TrendingUp className="size-4 text-primary" />
+        <div className="mb-3 flex items-center gap-2 px-1">
+          <TrendingUp className="text-primary size-4" />
           <h3 className="text-sm font-semibold">Mungkin Anda kenal</h3>
         </div>
 
@@ -745,7 +627,7 @@ function EmptyQueryState({
             {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={i}
-                className="rounded-xl border border-border/60 bg-card p-3 flex items-center gap-3"
+                className="border-border/60 bg-card flex items-center gap-3 rounded-xl border p-3"
               >
                 <Skeleton className="size-10 rounded-full" />
                 <div className="flex-1 space-y-2">
@@ -756,15 +638,13 @@ function EmptyQueryState({
             ))}
           </div>
         ) : suggestions.length === 0 ? (
-          <p className="text-xs text-muted-foreground px-1">
-            Tidak ada saran saat ini.
-          </p>
+          <p className="text-muted-foreground px-1 text-xs">Tidak ada saran saat ini.</p>
         ) : (
           <div className="space-y-2">
             {suggestions.slice(0, 5).map((s) => (
               <Card
                 key={s.id}
-                className="p-3 flex items-center gap-3 hover:shadow-md transition-shadow border-border/60"
+                className="border-border/60 flex items-center gap-3 p-3 transition-shadow hover:shadow-md"
               >
                 <button
                   onClick={() => onViewProfile(s.id)}
@@ -776,17 +656,17 @@ function EmptyQueryState({
                     name={s.name}
                     seed={s.id}
                     size="md"
-                    className="ring-1 ring-border"
+                    className="ring-border ring-1"
                   />
                 </button>
                 <div className="min-w-0 flex-1">
                   <button
                     onClick={() => onViewProfile(s.id)}
-                    className="font-medium text-sm hover:underline truncate block max-w-full text-left"
+                    className="block max-w-full truncate text-left text-sm font-medium hover:underline"
                   >
                     {s.name}
                   </button>
-                  <div className="text-xs text-muted-foreground truncate">
+                  <div className="text-muted-foreground truncate text-xs">
                     @{s.username}
                     {s.mutualFriends > 0 && ` · ${s.mutualFriends} teman bersama`}
                   </div>
@@ -811,15 +691,15 @@ function EmptyQueryState({
 
 function NoResultsState({ query }: { query: string }) {
   return (
-    <div className="flex flex-col items-center text-center py-16 px-6">
-      <div className="size-20 rounded-2xl bg-muted flex items-center justify-center text-muted-foreground/60 mb-4">
+    <div className="flex flex-col items-center px-6 py-16 text-center">
+      <div className="bg-muted text-muted-foreground/60 mb-4 flex size-20 items-center justify-center rounded-2xl">
         <TrendingUp className="size-10" />
       </div>
-      <h3 className="font-semibold text-base mb-1">Tidak ada hasil</h3>
-      <p className="text-sm text-muted-foreground max-w-sm">
+      <h3 className="mb-1 text-base font-semibold">Tidak ada hasil</h3>
+      <p className="text-muted-foreground max-w-sm text-sm">
         Tidak ditemukan pengguna atau postingan untuk{" "}
-        <span className="font-semibold text-foreground">&ldquo;{query}&rdquo;</span>.
-        Coba kata kunci lain.
+        <span className="text-foreground font-semibold">&ldquo;{query}&rdquo;</span>. Coba kata
+        kunci lain.
       </p>
     </div>
   )
@@ -832,7 +712,7 @@ function SearchLoadingSkeleton() {
   return (
     <div className="space-y-6 py-2">
       <section>
-        <div className="flex items-center gap-2 mb-3 px-1">
+        <div className="mb-3 flex items-center gap-2 px-1">
           <Skeleton className="size-4 rounded" />
           <Skeleton className="h-4 w-24" />
         </div>
@@ -840,14 +720,14 @@ function SearchLoadingSkeleton() {
           {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
-              className="rounded-xl border border-border/60 bg-card p-3 sm:p-4 flex items-start gap-3"
+              className="border-border/60 bg-card flex items-start gap-3 rounded-xl border p-3 sm:p-4"
             >
-              <Skeleton className="size-12 rounded-full shrink-0" />
+              <Skeleton className="size-12 shrink-0 rounded-full" />
               <div className="flex-1 space-y-2 pt-1">
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-3 w-full mt-2" />
-                <Skeleton className="h-8 w-24 mt-2" />
+                <Skeleton className="mt-2 h-3 w-full" />
+                <Skeleton className="mt-2 h-8 w-24" />
               </div>
             </div>
           ))}
@@ -855,25 +735,22 @@ function SearchLoadingSkeleton() {
       </section>
 
       <section>
-        <div className="flex items-center gap-2 mb-3 px-1">
+        <div className="mb-3 flex items-center gap-2 px-1">
           <Skeleton className="size-4 rounded" />
           <Skeleton className="h-4 w-24" />
         </div>
         <div className="space-y-2">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div
-              key={i}
-              className="rounded-xl border border-border/60 bg-card p-3 sm:p-4"
-            >
-              <div className="flex items-center gap-2.5 mb-2">
+            <div key={i} className="border-border/60 bg-card rounded-xl border p-3 sm:p-4">
+              <div className="mb-2 flex items-center gap-2.5">
                 <Skeleton className="size-8 rounded-full" />
                 <div className="space-y-1.5">
                   <Skeleton className="h-3 w-28" />
                   <Skeleton className="h-2.5 w-20" />
                 </div>
               </div>
-              <Skeleton className="h-3 w-full mb-1.5" />
-              <Skeleton className="h-3 w-5/6 mb-1.5" />
+              <Skeleton className="mb-1.5 h-3 w-full" />
+              <Skeleton className="mb-1.5 h-3 w-5/6" />
               <Skeleton className="h-3 w-2/3" />
             </div>
           ))}
@@ -897,11 +774,7 @@ function escapeHtml(str: string): string {
 
 function highlightQuery(html: string, query: string): string {
   if (!query.trim()) return html
-  // Escape regex special chars from query
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
   const re = new RegExp(`(${escaped})`, "gi")
-  return html.replace(
-    re,
-    '<mark class="bg-primary/20 text-primary rounded px-0.5">$1</mark>'
-  )
+  return html.replace(re, '<mark class="bg-primary/20 text-primary rounded px-0.5">$1</mark>')
 }

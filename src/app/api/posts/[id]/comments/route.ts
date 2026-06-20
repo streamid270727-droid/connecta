@@ -2,6 +2,16 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { rateLimit } from "@/lib/rate-limit"
+import { z } from "zod"
+
+const createCommentSchema = z.object({
+  content: z
+    .string()
+    .min(1, "Komentar tidak boleh kosong")
+    .max(1000, "Komentar maksimal 1000 karakter"),
+  parentId: z.string().optional().nullable(),
+})
 
 export async function GET(
   request: Request,
@@ -82,15 +92,22 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const { id } = await params
-    const body = await request.json()
-    const { content, parentId } = body
 
-    if (!content || !content.trim()) {
-      return NextResponse.json({ error: "Komentar tidak boleh kosong" }, { status: 400 })
+    // Rate limit: 20 comments per minute per user
+    const { success } = rateLimit(`comments:${session.user.id}`, 20, 60000)
+    if (!success) {
+      return NextResponse.json({ error: "Terlalu banyak komentar. Coba lagi dalam 1 menit." }, { status: 429 })
     }
-    if (content.length > 1000) {
-      return NextResponse.json({ error: "Komentar terlalu panjang" }, { status: 400 })
+
+    const body = await request.json()
+    const parsed = createCommentSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0].message },
+        { status: 400 }
+      )
     }
+    const { content, parentId } = parsed.data
 
     const post = await db.post.findUnique({ where: { id }, select: { authorId: true } })
     if (!post) {

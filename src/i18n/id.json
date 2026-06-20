@@ -1,0 +1,128 @@
+{
+  "app": {
+    "name": "Connecta",
+    "tagline": "Terhubung, Berbagi, Berkembang"
+  },
+  "nav": {
+    "feed": "Beranda",
+    "discover": "Jelajahi",
+    "notifications": "Notifikasi",
+    "messages": "Pesan",
+    "friends": "Teman",
+    "search": "Cari",
+    "settings": "Pengaturan",
+    "admin": "Admin",
+    "profile": "Profil"
+  },
+  "feed": {
+    "title": "Beranda",
+    "whatsOnMind": "Ada apa?",
+    "whatsNew": "Ada yang baru?",
+    "post": "Kirim",
+    "empty": "Belum ada postingan",
+    "emptyDesc": "Jadilah yang pertama memposting sesuatu untuk dilihat semua orang.",
+    "emptyFriends": "Belum ada postingan dari teman",
+    "emptyFriendsDesc": "Teman Anda belum memposting sesuatu. Coba lihat feed semua orang.",
+    "endOfFeed": "Itulah semua untuk sekarang",
+    "all": "Semua",
+    "friends": "Teman"
+  },
+  "post": {
+    "like": "Suka",
+    "comment": "Komentar",
+    "share": "Bagikan",
+    "save": "Simpan",
+    "unsave": "Hapus simpanan",
+    "edit": "Edit",
+    "delete": "Hapus",
+    "confirmDelete": "Hapus Postingan?",
+    "confirmDeleteDesc": "Postingan ini akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.",
+    "cancel": "Batal",
+    "writeComment": "Tulis komentar...",
+    "noComments": "Belum ada komentar. Jadilah yang pertama!",
+    "shareToFeed": "Bagikan ke feed",
+    "copied": "Link tersalin!"
+  },
+  "profile": {
+    "editProfile": "Edit Profil",
+    "friends": "Teman",
+    "posts": "Postingan",
+    "photos": "Foto",
+    "saved": "Tersimpan",
+    "noPosts": "Anda belum memposting apapun",
+    "noPostsDesc": "Bagikan momen pertama Anda untuk mulai terhubung dengan teman.",
+    "noFriends": "Anda belum memiliki teman",
+    "noPhotos": "Anda belum mengunggah foto",
+    "noSaved": "Belum ada postingan tersimpan",
+    "noSavedDesc": "Postingan yang Anda simpan akan muncul di sini.",
+    "privateProfile": "Akun Privat",
+    "privateProfileDesc": "Untuk melihat postingan pengguna ini, kirim permintaan teman dan tunggu hingga disetujui.",
+    "createPost": "Buat Postingan"
+  },
+  "messages": {
+    "title": "Pesan",
+    "newChat": "Pesan Baru",
+    "selectFriend": "Pilih teman untuk memulai percakapan.",
+    "searchFriends": "Cari teman...",
+    "noMessages": "Belum ada pesan",
+    "typeMessage": "Ketik pesan..."
+  },
+  "friends": {
+    "title": "Teman",
+    "requests": "Permintaan",
+    "suggestions": "Saran",
+    "accept": "Terima",
+    "reject": "Tolak",
+    "unfriend": "Hapus Teman",
+    "sendRequest": "Tambah Teman",
+    "requestSent": "Permintaan Terkirim",
+    "noFriends": "Belum ada teman untuk ditampilkan",
+    "noRequests": "Tidak ada permintaan teman",
+    "noSuggestions": "Tidak ada saran saat ini"
+  },
+  "notifications": {
+    "title": "Notifikasi",
+    "all": "Semua",
+    "unread": "Belum Dibaca",
+    "markAllRead": "Tandai semua sudah dibaca",
+    "empty": "Tidak ada notifikasi",
+    "emptyUnread": "Tidak ada notifikasi belum dibaca",
+    "emptyDesc": "Aktivitas terkait akun Anda akan tampil di sini."
+  },
+  "settings": {
+    "title": "Pengaturan",
+    "profile": "Profil",
+    "appearance": "Tampilan",
+    "language": "Bahasa",
+    "theme": "Tema",
+    "light": "Terang",
+    "dark": "Gelap",
+    "system": "Sistem"
+  },
+  "auth": {
+    "login": "Masuk",
+    "register": "Daftar",
+    "email": "Email",
+    "password": "Password",
+    "name": "Nama",
+    "username": "Username",
+    "welcome": "Selamat datang",
+    "loginDesc": "Masuk untuk melanjutkan ke Connecta",
+    "registerDesc": "Buat akun baru di Connecta",
+    "noAccount": "Belum punya akun?",
+    "hasAccount": "Sudah punya akun?"
+  },
+  "common": {
+    "loading": "Memuat...",
+    "error": "Terjadi kesalahan",
+    "retry": "Coba lagi",
+    "save": "Simpan",
+    "cancel": "Batal",
+    "delete": "Hapus",
+    "search": "Cari...",
+    "noResults": "Tidak ada hasil",
+    "back": "Kembali",
+    "next": "Selanjutnya",
+    "seeAll": "Lihat Semua"
+  }
+}

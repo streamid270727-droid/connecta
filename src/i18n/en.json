@@ -1,0 +1,128 @@
+{
+  "app": {
+    "name": "Connecta",
+    "tagline": "Connect, Share, Grow"
+  },
+  "nav": {
+    "feed": "Home",
+    "discover": "Discover",
+    "notifications": "Notifications",
+    "messages": "Messages",
+    "friends": "Friends",
+    "search": "Search",
+    "settings": "Settings",
+    "admin": "Admin",
+    "profile": "Profile"
+  },
+  "feed": {
+    "title": "Home",
+    "whatsOnMind": "What's on your mind?",
+    "whatsNew": "What's new?",
+    "post": "Post",
+    "empty": "No posts yet",
+    "emptyDesc": "Be the first to share something for everyone to see.",
+    "emptyFriends": "No posts from friends yet",
+    "emptyFriendsDesc": "Your friends haven't posted anything yet. Try checking everyone's feed.",
+    "endOfFeed": "That's all for now",
+    "all": "All",
+    "friends": "Friends"
+  },
+  "post": {
+    "like": "Like",
+    "comment": "Comment",
+    "share": "Share",
+    "save": "Save",
+    "unsave": "Unsave",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Delete Post?",
+    "confirmDeleteDesc": "This post will be permanently deleted. This action cannot be undone.",
+    "cancel": "Cancel",
+    "writeComment": "Write a comment...",
+    "noComments": "No comments yet. Be the first!",
+    "shareToFeed": "Share to feed",
+    "copied": "Link copied!"
+  },
+  "profile": {
+    "editProfile": "Edit Profile",
+    "friends": "Friends",
+    "posts": "Posts",
+    "photos": "Photos",
+    "saved": "Saved",
+    "noPosts": "No posts yet",
+    "noPostsDesc": "Share your first moment to start connecting with friends.",
+    "noFriends": "No friends yet",
+    "noPhotos": "No photos uploaded",
+    "noSaved": "No saved posts",
+    "noSavedDesc": "Posts you save will appear here.",
+    "privateProfile": "Private Account",
+    "privateProfileDesc": "To see this user's posts, send a friend request and wait for approval.",
+    "createPost": "Create Post"
+  },
+  "messages": {
+    "title": "Messages",
+    "newChat": "New Message",
+    "selectFriend": "Select a friend to start a conversation.",
+    "searchFriends": "Search friends...",
+    "noMessages": "No messages yet",
+    "typeMessage": "Type a message..."
+  },
+  "friends": {
+    "title": "Friends",
+    "requests": "Requests",
+    "suggestions": "Suggestions",
+    "accept": "Accept",
+    "reject": "Reject",
+    "unfriend": "Unfriend",
+    "sendRequest": "Add Friend",
+    "requestSent": "Request Sent",
+    "noFriends": "No friends to show",
+    "noRequests": "No friend requests",
+    "noSuggestions": "No suggestions at this time"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "all": "All",
+    "unread": "Unread",
+    "markAllRead": "Mark all as read",
+    "empty": "No notifications",
+    "emptyUnread": "No unread notifications",
+    "emptyDesc": "Activity related to your account will appear here."
+  },
+  "settings": {
+    "title": "Settings",
+    "profile": "Profile",
+    "appearance": "Appearance",
+    "language": "Language",
+    "theme": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "auth": {
+    "login": "Sign In",
+    "register": "Sign Up",
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "username": "Username",
+    "welcome": "Welcome",
+    "loginDesc": "Sign in to continue to Connecta",
+    "registerDesc": "Create a new account on Connecta",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "retry": "Try again",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "search": "Search...",
+    "noResults": "No results",
+    "back": "Back",
+    "next": "Next",
+    "seeAll": "See All"
+  }
+}

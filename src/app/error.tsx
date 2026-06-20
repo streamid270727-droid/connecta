@@ -1,26 +1,44 @@
 "use client"
 
-export default function Error({
+import { useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { AlertTriangle, RefreshCw, Home } from "lucide-react"
+
+export default function GlobalError({
   error,
   reset,
 }: {
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  useEffect(() => {
+    console.error("Global error:", error)
+  }, [error])
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 p-4">
-      <div className="text-center space-y-2">
-        <h2 className="text-xl font-bold text-destructive">Terjadi Kesalahan</h2>
-        <p className="text-sm text-muted-foreground max-w-md">
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4 text-center">
+      <div className="bg-destructive/10 flex size-16 items-center justify-center rounded-2xl">
+        <AlertTriangle className="text-destructive size-8" />
+      </div>
+      <div className="space-y-2">
+        <h2 className="text-xl font-bold">Terjadi Kesalahan</h2>
+        <p className="text-muted-foreground max-w-md text-sm">
           {error.message || "Sepertinya ada yang tidak beres. Silakan coba lagi."}
         </p>
+        {error.digest && (
+          <p className="text-muted-foreground/60 font-mono text-xs">Error ID: {error.digest}</p>
+        )}
       </div>
-      <button
-        onClick={reset}
-        className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-      >
-        Coba Lagi
-      </button>
+      <div className="flex gap-3">
+        <Button onClick={reset} variant="outline">
+          <RefreshCw className="size-4" />
+          Coba Lagi
+        </Button>
+        <Button onClick={() => (window.location.href = "/")}>
+          <Home className="size-4" />
+          ke Beranda
+        </Button>
+      </div>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,14 @@ import { useToast } from "@/hooks/use-toast"
 import { getSocket } from "@/lib/socket"
 import { formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import {
+  useNotifications,
+  useMarkNotificationRead,
+  useMarkAllNotificationsRead,
+  type AppNotification,
+} from "@/hooks/api/use-notifications"
+import { useQueryClient } from "@tanstack/react-query"
+import { EmptyState } from "@/components/common/empty-state"
 import {
   AlertCircle,
   Bell,
@@ -30,40 +38,9 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
-// ===== Types =====
-type NotificationType =
-  | "friend_request"
-  | "friend_accept"
-  | "like"
-  | "comment"
-  | "reply"
-  | "share"
-  | "message"
-
-interface NotificationActor {
-  id: string
-  name: string
-  username: string
-  avatarUrl: string | null
-  isVerified?: boolean
-}
-
-interface AppNotification {
-  id: string
-  recipientId: string
-  actorId: string | null
-  type: NotificationType
-  entityId: string | null
-  content: string | null
-  isRead: boolean
-  createdAt: string
-  actor: NotificationActor | null
-}
-
 type TabValue = "all" | "unread"
 type DateGroupKey = "today" | "yesterday" | "older"
 
-// ===== Date helpers =====
 function startOfDay(d: Date): number {
   const x = new Date(d)
   x.setHours(0, 0, 0, 0)
@@ -95,125 +72,81 @@ const DATE_GROUP_LABEL: Record<DateGroupKey, string> = {
 
 const DATE_GROUP_ORDER: DateGroupKey[] = ["today", "yesterday", "older"]
 
-// ===== Type → icon config =====
 interface TypeConfig {
   Icon: LucideIcon
-  bg: string // tailwind classes for the icon badge background
-  fg: string // tailwind classes for the icon color
-  label: string // aria-label / tooltip
+  bg: string
+  fg: string
+  label: string
 }
 
-const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
-  like: { Icon: Heart, bg: "bg-rose-500", fg: "text-white", label: "Suka" },
+const TYPE_CONFIG: Record<string, TypeConfig> = {
+  like: { Icon: Heart, bg: "bg-rose-500 dark:bg-rose-600/80", fg: "text-white", label: "Suka" },
   comment: {
     Icon: MessageCircle,
-    bg: "bg-emerald-500",
+    bg: "bg-emerald-500 dark:bg-emerald-600/80",
     fg: "text-white",
     label: "Komentar",
   },
   reply: {
     Icon: CornerDownRight,
-    bg: "bg-amber-500",
+    bg: "bg-amber-500 dark:bg-amber-600/80",
     fg: "text-white",
     label: "Balasan",
   },
   share: {
     Icon: Share2,
-    bg: "bg-violet-500",
+    bg: "bg-violet-500 dark:bg-violet-600/80",
     fg: "text-white",
     label: "Bagikan",
   },
   friend_request: {
     Icon: UserPlus,
-    bg: "bg-sky-500",
+    bg: "bg-sky-500 dark:bg-sky-600/80",
     fg: "text-white",
     label: "Permintaan teman",
   },
   friend_accept: {
     Icon: UserCheck,
-    bg: "bg-emerald-500",
+    bg: "bg-emerald-500 dark:bg-emerald-600/80",
     fg: "text-white",
     label: "Teman diterima",
   },
-  message: {
-    Icon: Mail,
-    bg: "bg-primary",
-    fg: "text-primary-foreground",
-    label: "Pesan",
-  },
+  message: { Icon: Mail, bg: "bg-primary", fg: "text-primary-foreground", label: "Pesan" },
 }
 
-// ===== Main component =====
 export function NotificationsView() {
   const { data: session } = useSession()
-  const { openProfile, openConversation, setView, setUnreadNotifications } =
-    useAppStore()
+  const { openProfile, openConversation, setView, setUnreadNotifications } = useAppStore()
   const { toast } = useToast()
+  const qc = useQueryClient()
 
   const [activeTab, setActiveTab] = useState<TabValue>("all")
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [markingAll, setMarkingAll] = useState(false)
-  const [markingId, setMarkingId] = useState<string | null>(null)
-  const [cursor, setCursor] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.isRead).length,
-    [notifications]
-  )
+  const notifQuery = useNotifications()
+  const markRead = useMarkNotificationRead()
+  const markAllRead = useMarkAllNotificationsRead()
 
-  // ===== Fetcher =====
-  const fetchNotifications = useCallback(async (cursorParam?: string) => {
-    if (cursorParam) {
-      setLoadingMore(true)
-    } else {
-      setLoading(true)
-    }
-    setError(null)
-    try {
-      const url = cursorParam
-        ? `/api/notifications?cursor=${cursorParam}`
-        : "/api/notifications"
-      const res = await fetch(url)
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || "Gagal memuat notifikasi")
-      }
-      const data = await res.json()
-      const list: AppNotification[] = data.notifications || []
-      if (cursorParam) {
-        setNotifications((prev) => [...prev, ...list])
-      } else {
-        setNotifications(list)
-        setUnreadNotifications(list.filter((n) => !n.isRead).length)
-      }
-      setCursor(data.nextCursor)
-      setHasMore(!!data.nextCursor)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Terjadi kesalahan")
-    } finally {
-      setLoading(false)
-      setLoadingMore(false)
-    }
-  }, [setUnreadNotifications])
+  const notifications = notifQuery.data?.notifications ?? []
 
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.isRead).length, [notifications])
+
+  // Sync unread count to store
   useEffect(() => {
-    void fetchNotifications()
-  }, [fetchNotifications])
+    if (!notifQuery.isLoading) {
+      setUnreadNotifications(unreadCount)
+    }
+  }, [unreadCount, notifQuery.isLoading, setUnreadNotifications])
 
   // Real-time: listen for new notifications via socket
   const notificationsRef = useRef(notifications)
   useEffect(() => {
     notificationsRef.current = notifications
   }, [notifications])
+
   useEffect(() => {
     const socket = getSocket()
     const handleNewNotif = (data: any) => {
       if (!data || data.recipientId !== session?.user?.id) return
-      // Add the new notification to the top of the list
       const newNotif: AppNotification = {
         id: data.id || `temp-${Date.now()}`,
         type: data.type || "like",
@@ -225,22 +158,19 @@ export function NotificationsView() {
         isRead: false,
         createdAt: new Date().toISOString(),
       }
-      setNotifications((prev) => {
-        // Dedupe by id
-        if (prev.some((n) => n.id === newNotif.id)) return prev
-        return [newNotif, ...prev]
+      qc.setQueryData<any>(["notifications"], (old: any) => {
+        if (!old) return old
+        if (old.notifications.some((n: any) => n.id === newNotif.id)) return old
+        return { ...old, notifications: [newNotif, ...old.notifications] }
       })
-      setUnreadNotifications(
-        notificationsRef.current.filter((n) => !n.isRead).length + 1
-      )
+      setUnreadNotifications(notificationsRef.current.filter((n) => !n.isRead).length + 1)
     }
     socket.on("notif:new", handleNewNotif)
     return () => {
       socket.off("notif:new", handleNewNotif)
     }
-  }, [session?.user?.id, setUnreadNotifications])
+  }, [session?.user?.id, setUnreadNotifications, qc])
 
-  // ===== Navigate per type =====
   const navigateForType = useCallback(
     (n: AppNotification) => {
       if (!n.actor) return
@@ -255,129 +185,55 @@ export function NotificationsView() {
           openConversation("", n.actor.id)
           break
         default:
-          // like, comment, reply, share — for MVP, just mark as read.
           break
       }
     },
     [openConversation, openProfile, setView]
   )
 
-  // ===== Mark a single notification as read (best-effort background) =====
-  const markAsRead = useCallback(
-    async (n: AppNotification) => {
-      const prevUnread = notifications.filter((x) => !x.isRead).length
-      // Optimistic update
-      setNotifications((prev) =>
-        prev.map((x) => (x.id === n.id ? { ...x, isRead: true } : x))
-      )
-      setUnreadNotifications(Math.max(0, prevUnread - 1))
-      try {
-        const res = await fetch(`/api/notifications/${n.id}/read`, {
-          method: "POST",
-        })
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.error || "Gagal menandai dibaca")
-        }
-      } catch (e) {
-        // Revert on failure
-        setNotifications((prev) =>
-          prev.map((x) => (x.id === n.id ? { ...x, isRead: false } : x))
-        )
-        setUnreadNotifications(prevUnread)
-        toast({
-          title: "Gagal",
-          description:
-            e instanceof Error ? e.message : "Tidak dapat menandai notifikasi",
-          variant: "destructive",
-        })
-      }
-    },
-    [notifications, setUnreadNotifications, toast]
-  )
-
   const handleNotificationClick = (n: AppNotification) => {
-    // Navigate first for snappy UX
     navigateForType(n)
-    // Mark as read in background (skip if already read or another mark in-flight)
-    if (!n.isRead && markingId !== n.id) {
-      setMarkingId(n.id)
-      void markAsRead(n).finally(() => {
-        setMarkingId((cur) => (cur === n.id ? null : cur))
-      })
+    if (!n.isRead && !markRead.isPending) {
+      markRead.mutate(n.id)
     }
   }
 
-  // ===== Mark all as read =====
-  const handleMarkAllRead = async () => {
-    if (markingAll || unreadCount === 0) return
-    setMarkingAll(true)
-    try {
-      const res = await fetch("/api/notifications/read-all", { method: "POST" })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || "Gagal menandai dibaca")
-      }
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
-      setUnreadNotifications(0)
-      toast({
-        title: "Berhasil",
-        description: "Semua notifikasi ditandai dibaca",
-      })
-    } catch (e) {
-      toast({
-        title: "Gagal",
-        description:
-          e instanceof Error ? e.message : "Terjadi kesalahan",
-        variant: "destructive",
-      })
-    } finally {
-      setMarkingAll(false)
-    }
+  const handleMarkAllRead = () => {
+    if (unreadCount === 0) return
+    markAllRead.mutate(undefined, {
+      onSuccess: () =>
+        toast({ title: "Berhasil", description: "Semua notifikasi ditandai dibaca" }),
+      onError: (e) => toast({ title: "Gagal", description: e.message, variant: "destructive" }),
+    })
   }
 
-  // ===== Group notifications by date =====
   const grouped = useMemo(() => {
-    const filtered =
-      activeTab === "unread"
-        ? notifications.filter((n) => !n.isRead)
-        : notifications
-    const groups: Record<DateGroupKey, AppNotification[]> = {
-      today: [],
-      yesterday: [],
-      older: [],
-    }
+    const filtered = activeTab === "unread" ? notifications.filter((n) => !n.isRead) : notifications
+    const groups: Record<DateGroupKey, AppNotification[]> = { today: [], yesterday: [], older: [] }
     for (const n of filtered) {
-      const key = dateGroupKey(new Date(n.createdAt))
-      groups[key].push(n)
+      groups[dateGroupKey(new Date(n.createdAt))].push(n)
     }
     return groups
   }, [notifications, activeTab])
 
   const visibleGroups = DATE_GROUP_ORDER.filter((k) => grouped[k].length > 0)
-  const visibleCount =
-    activeTab === "unread"
-      ? notifications.filter((n) => !n.isRead).length
-      : notifications.length
+  const visibleCount = activeTab === "unread" ? unreadCount : notifications.length
 
   return (
     <div className="min-h-screen pb-8">
-      {/* ===== Header ===== */}
-      <div className="px-4 sm:px-6 pt-4 pb-2">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="size-10 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-md shadow-rose-500/30">
+      <div className="px-4 pt-4 pb-2 sm:px-6">
+        <div className="mb-1 flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-md shadow-rose-500/30">
             <Bell className="size-5 text-white" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold">Notifikasi</h1>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {notifications.length} notifikasi
               {unreadCount > 0 && (
                 <>
                   {" · "}
-                  <span className="text-primary font-medium">
-                    {unreadCount} belum dibaca
-                  </span>
+                  <span className="text-primary font-medium">{unreadCount} belum dibaca</span>
                 </>
               )}
             </p>
@@ -387,10 +243,10 @@ export function NotificationsView() {
               variant="outline"
               size="sm"
               onClick={handleMarkAllRead}
-              disabled={markingAll}
-              className="shrink-0 h-8"
+              disabled={markAllRead.isPending}
+              className="h-8 shrink-0"
             >
-              {markingAll ? (
+              {markAllRead.isPending ? (
                 <Loader2 className="size-3.5 animate-spin" />
               ) : (
                 <CheckCheck className="size-3.5" />
@@ -402,35 +258,34 @@ export function NotificationsView() {
         </div>
       </div>
 
-      {/* ===== Sticky Tab Bar ===== */}
-      <div className="sticky top-14 sm:top-16 z-30 bg-background/80 glass border-b">
+      <div className="bg-background/80 glass sticky top-14 z-30 border-b sm:top-16">
         <div className="px-2 sm:px-4">
           <Tabs
             value={activeTab}
             onValueChange={(v) => setActiveTab(v as TabValue)}
             className="w-full"
           >
-            <TabsList className="bg-transparent h-12 w-full justify-start gap-1 p-0 rounded-none">
+            <TabsList className="h-12 w-full justify-start gap-1 rounded-none bg-transparent p-0">
               <TabsTrigger
                 value="all"
-                className="flex-1 sm:flex-none sm:px-5 h-10 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm transition-all"
+                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground h-10 flex-1 rounded-lg transition-all data-[state=active]:shadow-sm sm:flex-none sm:px-5"
               >
                 <Bell className="size-4" />
                 Semua
                 {notifications.length > 0 && (
-                  <span className="ml-1 min-w-5 h-5 px-1.5 rounded-full bg-secondary text-secondary-foreground text-[10px] font-bold flex items-center justify-center">
+                  <span className="bg-secondary text-secondary-foreground ml-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold">
                     {notifications.length}
                   </span>
                 )}
               </TabsTrigger>
               <TabsTrigger
                 value="unread"
-                className="flex-1 sm:flex-none sm:px-5 h-10 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm transition-all"
+                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground h-10 flex-1 rounded-lg transition-all data-[state=active]:shadow-sm sm:flex-none sm:px-5"
               >
                 <BellOff className="size-4" />
                 Belum Dibaca
                 {unreadCount > 0 && (
-                  <span className="ml-1 min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+                  <span className="bg-primary text-primary-foreground ml-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold">
                     {unreadCount}
                   </span>
                 )}
@@ -440,23 +295,22 @@ export function NotificationsView() {
         </div>
       </div>
 
-      {/* ===== Body ===== */}
-      <div className="px-2 sm:px-4 py-4">
-        {loading ? (
+      <div className="px-2 py-4 sm:px-4">
+        {notifQuery.isLoading ? (
           <div className="space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (
               <NotificationRowSkeleton key={i} />
             ))}
           </div>
-        ) : error ? (
-          <ErrorState message={error} onRetry={fetchNotifications} />
+        ) : notifQuery.error ? (
+          <ErrorState message="Gagal memuat notifikasi" onRetry={() => notifQuery.refetch()} />
         ) : visibleCount === 0 ? (
-          <EmptyState activeTab={activeTab} />
+          <NotificationsEmptyState activeTab={activeTab} />
         ) : (
           <div className="space-y-6">
             {visibleGroups.map((groupKey) => (
               <section key={groupKey}>
-                <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                <h2 className="text-muted-foreground mb-2 px-1 text-[11px] font-semibold tracking-wider uppercase">
                   {DATE_GROUP_LABEL[groupKey]}
                 </h2>
                 <div className="space-y-2">
@@ -466,7 +320,7 @@ export function NotificationsView() {
                       notification={n}
                       onClick={() => handleNotificationClick(n)}
                       onViewActor={() => n.actor && openProfile(n.actor.id)}
-                      busy={markingId === n.id}
+                      busy={markRead.isPending}
                     />
                   ))}
                 </div>
@@ -474,36 +328,9 @@ export function NotificationsView() {
             ))}
           </div>
         )}
-
-        {/* Load more */}
-        {hasMore && activeTab === "all" && (
-          <div className="flex justify-center py-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => cursor && void fetchNotifications(cursor)}
-              disabled={loadingMore}
-            >
-              {loadingMore ? (
-                <Loader2 className="size-3.5 animate-spin mr-2" />
-              ) : null}
-              Muat lebih banyak
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   )
-}
-
-// =====================================================
-// ===== Sub-component: NotificationCard =====
-// =====================================================
-interface NotificationCardProps {
-  notification: AppNotification
-  onClick: () => void
-  onViewActor: () => void
-  busy: boolean
 }
 
 function NotificationCard({
@@ -511,9 +338,13 @@ function NotificationCard({
   onClick,
   onViewActor,
   busy,
-}: NotificationCardProps) {
-  const cfg =
-    TYPE_CONFIG[notification.type] ?? TYPE_CONFIG.like
+}: {
+  notification: AppNotification
+  onClick: () => void
+  onViewActor: () => void
+  busy: boolean
+}) {
+  const cfg = TYPE_CONFIG[notification.type] ?? TYPE_CONFIG.like
   const { actor } = notification
   const isUnread = !notification.isRead
   const displayName = actor?.name ?? "Seseorang"
@@ -530,21 +361,17 @@ function NotificationCard({
         }
       }}
       className={cn(
-        "p-3 sm:p-4 flex items-start gap-3 sm:gap-4 cursor-pointer transition-all border-border/60 hover:shadow-md hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "border-border/60 hover:border-primary/30 focus-visible:ring-ring/50 flex cursor-pointer items-start gap-3 p-3 transition-all hover:shadow-md focus-visible:ring-2 focus-visible:outline-none sm:gap-4 sm:p-4",
         isUnread && "bg-primary/5 border-primary/20"
       )}
     >
-      {/* Avatar with type-icon badge overlay */}
       <div className="relative shrink-0">
         <button
           onClick={(e) => {
             e.stopPropagation()
             onViewActor()
           }}
-          className="rounded-full block"
-          aria-label={
-            actor ? `Lihat profil ${actor.name}` : "Lihat profil"
-          }
+          className="block rounded-full"
         >
           {actor ? (
             <UserAvatar
@@ -552,29 +379,26 @@ function NotificationCard({
               name={actor.name}
               seed={actor.id}
               size="lg"
-              className="ring-1 ring-border"
+              className="ring-border ring-1"
             />
           ) : (
-            <div className="size-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground ring-1 ring-border">
+            <div className="bg-muted text-muted-foreground ring-border flex size-12 items-center justify-center rounded-full ring-1">
               <UserPlus className="size-5" />
             </div>
           )}
         </button>
         <div
           className={cn(
-            "absolute -bottom-1 -right-1 size-5 rounded-full flex items-center justify-center ring-2 ring-background",
+            "ring-background absolute -right-1 -bottom-1 flex size-5 items-center justify-center rounded-full ring-2",
             cfg.bg,
             cfg.fg
           )}
-          aria-label={cfg.label}
-          title={cfg.label}
         >
           <cfg.Icon className="size-3" />
         </div>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p className="text-sm leading-relaxed break-words">
@@ -587,33 +411,23 @@ function NotificationCard({
               >
                 {displayName}
                 {actor?.isVerified && (
-                  <CheckCircle2 className="inline-block size-3.5 ml-1 text-primary align-text-bottom" />
+                  <CheckCircle2 className="text-primary ml-1 inline-block size-3.5 align-text-bottom" />
                 )}
               </button>
               {notification.content && (
                 <>
-                  {" "}
-                  <span className="text-foreground/90">
-                    {notification.content}
-                  </span>
+                  <span className="text-foreground/90"> {notification.content}</span>
                 </>
               )}
             </p>
-            <div className="text-[11px] text-muted-foreground mt-1">
+            <div className="text-muted-foreground mt-1 text-[11px]">
               {formatRelativeTime(notification.createdAt)}
             </div>
           </div>
-
-          {/* Unread indicator + busy spinner */}
-          <div className="flex items-center gap-2 shrink-0 pt-0.5">
-            {busy && (
-              <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-            )}
+          <div className="flex shrink-0 items-center gap-2 pt-0.5">
+            {busy && <Loader2 className="text-muted-foreground size-3.5 animate-spin" />}
             {isUnread && (
-              <span
-                aria-label="Belum dibaca"
-                className="size-2.5 rounded-full bg-primary shadow-sm shadow-primary/40"
-              />
+              <span className="bg-primary shadow-primary/40 size-2.5 rounded-full shadow-sm" />
             )}
           </div>
         </div>
@@ -622,15 +436,12 @@ function NotificationCard({
   )
 }
 
-// =====================================================
-// ===== Skeletons / Empty / Error =====
-// =====================================================
 function NotificationRowSkeleton() {
   return (
-    <Card className="p-3 sm:p-4 flex items-start gap-3 sm:gap-4 border-border/60">
+    <Card className="border-border/60 flex items-start gap-3 p-3 sm:gap-4 sm:p-4">
       <div className="relative shrink-0">
         <Skeleton className="size-12 rounded-full" />
-        <Skeleton className="absolute -bottom-1 -right-1 size-5 rounded-full ring-2 ring-background" />
+        <Skeleton className="ring-background absolute -right-1 -bottom-1 size-5 rounded-full ring-2" />
       </div>
       <div className="flex-1 space-y-2 pt-1">
         <Skeleton className="h-4 w-3/4" />
@@ -640,47 +451,30 @@ function NotificationRowSkeleton() {
   )
 }
 
-function EmptyState({ activeTab }: { activeTab: TabValue }) {
+function NotificationsEmptyState({ activeTab }: { activeTab: TabValue }) {
   const isUnreadTab = activeTab === "unread"
   return (
-    <div className="flex flex-col items-center justify-center text-center py-16 px-6">
-      <div className="size-20 rounded-2xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 flex items-center justify-center text-rose-500/60 mb-4">
-        {isUnreadTab ? (
-          <BellOff className="size-10" />
-        ) : (
-          <Bell className="size-10" />
-        )}
-      </div>
-      <h3 className="font-semibold text-base mb-1">
-        {isUnreadTab
-          ? "Tidak ada notifikasi belum dibaca"
-          : "Tidak ada notifikasi"}
-      </h3>
-      <p className="text-sm text-muted-foreground max-w-sm">
-        {isUnreadTab
+    <EmptyState
+      icon={isUnreadTab ? <BellOff className="size-10" /> : <Bell className="size-10" />}
+      title={isUnreadTab ? "Tidak ada notifikasi belum dibaca" : "Tidak ada notifikasi"}
+      description={
+        isUnreadTab
           ? "Semua notifikasi sudah Anda baca. Notifikasi baru akan muncul di sini."
-          : "Aktivitas terkait akun Anda — seperti suka, komentar, dan permintaan teman — akan tampil di sini."}
-      </p>
-    </div>
+          : "Aktivitas terkait akun Anda — seperti suka, komentar, dan permintaan teman — akan tampil di sini."
+      }
+    />
   )
 }
 
-function ErrorState({
-  message,
-  onRetry,
-}: {
-  message: string
-  onRetry: () => void
-}) {
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-16 px-6">
-      <div className="size-16 rounded-2xl bg-destructive/10 flex items-center justify-center text-destructive mb-4">
+    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="bg-destructive/10 text-destructive mb-4 flex size-16 items-center justify-center rounded-2xl">
         <AlertCircle className="size-8" />
       </div>
-      <p className="text-sm text-muted-foreground mb-4 max-w-sm">{message}</p>
+      <p className="text-muted-foreground mb-4 max-w-sm text-sm">{message}</p>
       <Button variant="outline" onClick={onRetry}>
-        <RefreshCw className="size-4" />
-        Coba lagi
+        <RefreshCw className="size-4" /> Coba lagi
       </Button>
     </div>
   )

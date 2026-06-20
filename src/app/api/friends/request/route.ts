@@ -2,6 +2,12 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { rateLimit } from "@/lib/rate-limit"
+import { z } from "zod"
+
+const friendRequestSchema = z.object({
+  recipientId: z.string().min(1, "ID penerima wajib diisi"),
+})
 
 export async function POST(request: Request) {
   try {
@@ -10,15 +16,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { recipientId } = body as { recipientId?: string }
+    // Rate limit: 10 friend requests per minute per user
+    const { success } = rateLimit(`friend-req:${session.user.id}`, 10, 60000)
+    if (!success) {
+      return NextResponse.json({ error: "Terlalu banyak permintaan. Coba lagi dalam 1 menit." }, { status: 429 })
+    }
 
-    if (!recipientId || typeof recipientId !== "string") {
+    const body = await request.json()
+    const parsed = friendRequestSchema.safeParse(body)
+
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "ID penerima wajib diisi" },
+        { error: parsed.error.issues[0].message },
         { status: 400 }
       )
     }
+
+    const { recipientId } = parsed.data
 
     if (recipientId === session.user.id) {
       return NextResponse.json(

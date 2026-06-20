@@ -7,27 +7,153 @@ import { cn } from "@/lib/utils"
 const EMOJI_CATEGORIES = [
   {
     name: "Sering Dipakai",
-    emojis: ["😀", "😂", "😍", "🥰", "😊", "🙏", "👍", "❤️", "🔥", "✨", "🎉", "💯", "😎", "🤔", "😢", "😭", "😤", "🥳", "🤩", "😴"],
+    emojis: [
+      "😀",
+      "😂",
+      "😍",
+      "🥰",
+      "😊",
+      "🙏",
+      "👍",
+      "❤️",
+      "🔥",
+      "✨",
+      "🎉",
+      "💯",
+      "😎",
+      "🤔",
+      "😢",
+      "😭",
+      "😤",
+      "🥳",
+      "🤩",
+      "😴",
+    ],
   },
   {
     name: "Senang",
-    emojis: ["😃", "😄", "😁", "😆", "😅", "🤣", "😉", "🙃", "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🤫", "😐", "😑", "😶"],
+    emojis: [
+      "😃",
+      "😄",
+      "😁",
+      "😆",
+      "😅",
+      "🤣",
+      "😉",
+      "🙃",
+      "😋",
+      "😛",
+      "😜",
+      "🤪",
+      "😝",
+      "🤑",
+      "🤗",
+      "🤭",
+      "🤫",
+      "😐",
+      "😑",
+      "😶",
+    ],
   },
   {
     name: "Cinta",
-    emojis: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "😍", "🥰", "😘"],
+    emojis: [
+      "❤️",
+      "🧡",
+      "💛",
+      "💚",
+      "💙",
+      "💜",
+      "🖤",
+      "🤍",
+      "🤎",
+      "💕",
+      "💞",
+      "💓",
+      "💗",
+      "💖",
+      "💘",
+      "💝",
+      "💟",
+      "😍",
+      "🥰",
+      "😘",
+    ],
   },
   {
     name: "Gestur",
-    emojis: ["👍", "👎", "👌", "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚", "🖐️", "🖖", "👋", "🤏", "🙏"],
+    emojis: [
+      "👍",
+      "👎",
+      "👌",
+      "✌️",
+      "🤞",
+      "🤟",
+      "🤘",
+      "🤙",
+      "👈",
+      "👉",
+      "👆",
+      "👇",
+      "☝️",
+      "✋",
+      "🤚",
+      "🖐️",
+      "🖖",
+      "👋",
+      "🤏",
+      "🙏",
+    ],
   },
   {
     name: "Hewan",
-    emojis: ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🙈", "🙉", "🙊", "🐔", "🐧"],
+    emojis: [
+      "🐶",
+      "🐱",
+      "🐭",
+      "🐹",
+      "🐰",
+      "🦊",
+      "🐻",
+      "🐼",
+      "🐨",
+      "🐯",
+      "🦁",
+      "🐮",
+      "🐷",
+      "🐸",
+      "🐵",
+      "🙈",
+      "🙉",
+      "🙊",
+      "🐔",
+      "🐧",
+    ],
   },
   {
     name: "Makanan",
-    emojis: ["🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🫐", "🍈", "🍒", "🍑", "🥭", "🍍", "🥝", "🍅", "🥑", "🍕", "🍔", "🍟"],
+    emojis: [
+      "🍎",
+      "🍐",
+      "🍊",
+      "🍋",
+      "🍌",
+      "🍉",
+      "🍇",
+      "🍓",
+      "🫐",
+      "🍈",
+      "🍒",
+      "🍑",
+      "🥭",
+      "🍍",
+      "🥝",
+      "🍅",
+      "🥑",
+      "🍕",
+      "🍔",
+      "🍟",
+    ],
   },
 ]
 
@@ -66,7 +192,7 @@ export function EmojiPicker({ onSelect, className }: EmojiPickerProps) {
       <Button
         variant="ghost"
         size="icon"
-        className="size-9 shrink-0 text-muted-foreground"
+        className="text-muted-foreground size-9 shrink-0"
         onClick={() => setOpen((o) => !o)}
         aria-label="Emoji"
         type="button"
@@ -75,15 +201,15 @@ export function EmojiPicker({ onSelect, className }: EmojiPickerProps) {
       </Button>
 
       {open && (
-        <div className="absolute bottom-full left-0 mb-2 w-72 bg-background border border-border rounded-xl shadow-lg z-50 overflow-hidden">
+        <div className="bg-background border-border absolute bottom-full left-0 z-50 mb-2 w-72 overflow-hidden rounded-xl border shadow-lg">
           {/* Category tabs */}
-          <div className="flex flex-nowrap gap-1 p-2 border-b border-border/60 overflow-x-auto scrollbar-hide">
+          <div className="border-border/60 scrollbar-hide flex flex-nowrap gap-1 overflow-x-auto border-b p-2">
             {EMOJI_CATEGORIES.map((cat, i) => (
               <button
                 key={cat.name}
                 onClick={() => setActiveCategory(i)}
                 className={cn(
-                  "px-2.5 py-1.5 text-xs rounded-lg whitespace-nowrap shrink-0 transition-colors",
+                  "shrink-0 rounded-lg px-2.5 py-1.5 text-xs whitespace-nowrap transition-colors",
                   i === activeCategory
                     ? "bg-primary/10 text-primary font-medium"
                     : "text-muted-foreground hover:bg-accent"
@@ -95,13 +221,13 @@ export function EmojiPicker({ onSelect, className }: EmojiPickerProps) {
           </div>
 
           {/* Emoji grid */}
-          <div className="p-2 max-h-48 overflow-y-auto">
-            <div className="grid grid-cols-8 gap-0.5">
+          <div className="max-h-48 overflow-y-auto p-2">
+            <div className="grid grid-cols-6 gap-0.5 sm:grid-cols-8">
               {EMOJI_CATEGORIES[activeCategory].emojis.map((emoji) => (
                 <button
                   key={emoji}
                   onClick={() => handleSelect(emoji)}
-                  className="size-8 flex items-center justify-center text-lg hover:bg-accent rounded-lg transition-colors"
+                  className="hover:bg-accent flex size-8 items-center justify-center rounded-lg text-lg transition-colors"
                   type="button"
                 >
                   {emoji}

@@ -18,20 +18,21 @@ const registerSchema = z.object({
 export async function POST(request: Request) {
   try {
     // Rate limit: 5 registrations per minute per IP
-    const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
+    const ip =
+      request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
     const { success } = rateLimit(`register:${ip}`, 5, 60000)
     if (!success) {
-      return NextResponse.json({ error: "Terlalu banyak percobaan. Coba lagi dalam 1 menit." }, { status: 429 })
+      return NextResponse.json(
+        { error: "Terlalu banyak percobaan. Coba lagi dalam 1 menit." },
+        { status: 429 }
+      )
     }
 
     const body = await request.json()
     const parsed = registerSchema.safeParse(body)
     if (!parsed.success) {
       const firstError = parsed.error.issues?.[0]?.message || "Data tidak valid"
-      return NextResponse.json(
-        { error: firstError },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: firstError }, { status: 400 })
     }
 
     const { name, username, email, password } = parsed.data
@@ -68,6 +69,6 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Register error:", error)
-    return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 })
+    return NextResponse.json({ error: "Server error" }, { status: 500 })
   }
 }

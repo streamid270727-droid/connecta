@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster"
 import { Toaster as Sonner } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/theme-provider"
 import { SessionProvider } from "@/components/session-provider"
+import { QueryProvider } from "@/components/query-provider"
+import { I18nProvider } from "@/lib/i18n"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,7 +19,10 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Connecta — Terhubung, Berbagi, Berkembang",
+  title: {
+    default: "Connecta — Terhubung, Berbagi, Berkembang",
+    template: "%s | Connecta",
+  },
   description:
     "Connecta adalah platform jejaring sosial yang aman, cepat, dan intuitif untuk mempererat hubungan personal dan profesional. Bagikan momen, terhubung dengan teman, dan jelajahi dunia.",
   keywords: [
@@ -30,6 +35,8 @@ export const metadata: Metadata = {
     "Indonesia",
   ],
   authors: [{ name: "Connecta Team" }],
+  creator: "Connecta",
+  metadataBase: new URL("https://connecta.app"),
   icons: {
     icon: [
       { url: "/favicon.png", sizes: "192x192", type: "image/png" },
@@ -42,13 +49,28 @@ export const metadata: Metadata = {
     description:
       "Platform jejaring sosial yang aman, cepat, dan intuitif untuk mempererat hubungan personal dan profesional.",
     siteName: "Connecta",
+    locale: "id_ID",
     type: "website",
+    url: "https://connecta.app",
   },
   twitter: {
     card: "summary_large_image",
     title: "Connecta",
     description: "Platform jejaring sosial modern untuk semua.",
+    creator: "@connecta",
   },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  manifest: "/manifest.json",
 }
 
 export default function RootLayout({
@@ -59,7 +81,7 @@ export default function RootLayout({
   return (
     <html lang="id" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} bg-background text-foreground antialiased`}
       >
         <ThemeProvider
           attribute="class"
@@ -67,7 +89,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <SessionProvider>{children}</SessionProvider>
+          <SessionProvider>
+            <I18nProvider>
+              <QueryProvider>{children}</QueryProvider>
+            </I18nProvider>
+          </SessionProvider>
           <Toaster />
           <Sonner />
         </ThemeProvider>

@@ -11,6 +11,16 @@ const createPostSchema = z.object({
   images: z.array(z.string()).max(4, "Maksimal 4 gambar per postingan").optional(),
   videoUrl: z.string().optional().nullable(),
   sharedFromId: z.string().optional().nullable(),
+  linkPreview: z
+    .object({
+      title: z.string(),
+      description: z.string(),
+      image: z.string().nullable(),
+      url: z.string(),
+      siteName: z.string().nullable(),
+    })
+    .optional()
+    .nullable(),
 }).refine(
   (data) => data.content || data.images?.length || data.videoUrl || data.sharedFromId,
   { message: "Postingan tidak boleh kosong" }
@@ -107,6 +117,7 @@ export async function GET(request: Request) {
           content: p.content,
           images: parseImages(p.images),
           videoUrl: p.videoUrl,
+          linkPreview: p.linkPreview ? JSON.parse(p.linkPreview) : null,
           createdAt: p.createdAt,
           author: p.author,
           liked: !!userLike,
@@ -158,7 +169,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const { content, images, videoUrl, sharedFromId } = parsed.data
+    const { content, images, videoUrl, sharedFromId, linkPreview } = parsed.data
 
     const post = await db.post.create({
       data: {
@@ -166,6 +177,7 @@ export async function POST(request: Request) {
         images: images?.length ? JSON.stringify(images) : null,
         videoUrl: videoUrl || null,
         sharedFromId: sharedFromId || null,
+        linkPreview: linkPreview ? JSON.stringify(linkPreview) : null,
         authorId: session.user.id,
       },
       include: {
@@ -220,6 +232,7 @@ export async function POST(request: Request) {
         content: post.content,
         images: parseImages(post.images),
         videoUrl: post.videoUrl,
+        linkPreview: post.linkPreview ? JSON.parse(post.linkPreview) : null,
         createdAt: post.createdAt,
         author: post.author,
         liked: false,

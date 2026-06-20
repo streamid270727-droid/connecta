@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
+import { rateLimit } from "@/lib/rate-limit"
 
 async function getReactionSummary(postId: string) {
   const allLikes = await db.like.findMany({
@@ -19,16 +20,22 @@ async function getReactionSummary(postId: string) {
     .sort((a, b) => b.count - a.count)
 }
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const { id } = await params
+
+    // Rate limit: 30 reactions per minute per user
+    const { success } = rateLimit(`post-likes:${session.user.id}`, 30, 60000)
+    if (!success) {
+      return NextResponse.json(
+        { error: "Terlalu banyak aksi. Coba lagi dalam 1 menit." },
+        { status: 429 }
+      )
+    }
 
     // Parse body for optional emoji reaction
     let emoji: string | null = null
@@ -41,7 +48,7 @@ export async function POST(
 
     const post = await db.post.findUnique({ where: { id }, select: { authorId: true } })
     if (!post) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+      return NextResponse.json({ error: "Postingan tidak ditemukan" }, { status: 404 })
     }
 
     // Upsert like

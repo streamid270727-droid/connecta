@@ -23,8 +23,8 @@ export function BottomNav() {
 
   return (
     <>
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 glass safe-bottom">
-        <div className="grid grid-cols-5 h-14">
+      <nav className="bg-background/95 glass safe-bottom fixed right-0 bottom-0 left-0 z-40 border-t lg:hidden">
+        <div className="grid h-14 grid-cols-5">
           {items.slice(0, 2).map((item) => {
             const isActive = currentView === item.view
             const badge = item.view === "messages" ? unreadMessages : 0
@@ -34,19 +34,19 @@ export function BottomNav() {
                 key={item.view}
                 onClick={() => setView(item.view)}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 relative transition-colors",
+                  "relative flex flex-col items-center justify-center gap-0.5 transition-colors",
                   isActive ? "text-primary" : "text-muted-foreground"
                 )}
               >
                 <item.icon className="size-5" />
                 <span className="text-[10px] font-medium">{item.label}</span>
                 {badge > 0 && (
-                  <span className="absolute top-1 right-[calc(50%-1.25rem)] min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
+                  <span className="bg-primary text-primary-foreground absolute top-1 right-[calc(50%-1.25rem)] flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold">
                     {badge > 9 ? "9+" : badge}
                   </span>
                 )}
                 {isActive && (
-                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-primary" />
+                  <span className="bg-primary absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full" />
                 )}
               </button>
             )
@@ -56,17 +56,16 @@ export function BottomNav() {
           <button
             onClick={() => setStoryOpen(true)}
             className="flex items-center justify-center"
+            aria-label="Buat Story"
           >
-            <div className="size-12 rounded-full bg-primary flex items-center justify-center shadow-lg">
+            <div className="bg-primary flex size-12 items-center justify-center rounded-full shadow-lg">
               <Plus className="size-6 text-white" />
             </div>
           </button>
 
           {items.slice(2).map((item) => {
             const isActive =
-              item.view === "profile"
-                ? currentView === "profile"
-                : currentView === item.view
+              item.view === "profile" ? currentView === "profile" : currentView === item.view
             const badge = item.view === "messages" ? unreadMessages : 0
 
             return (
@@ -80,19 +79,19 @@ export function BottomNav() {
                   }
                 }}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 relative transition-colors",
+                  "relative flex flex-col items-center justify-center gap-0.5 transition-colors",
                   isActive ? "text-primary" : "text-muted-foreground"
                 )}
               >
                 <item.icon className="size-5" />
                 <span className="text-[10px] font-medium">{item.label}</span>
                 {badge > 0 && (
-                  <span className="absolute top-1 right-[calc(50%-1.25rem)] min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
+                  <span className="bg-primary text-primary-foreground absolute top-1 right-[calc(50%-1.25rem)] flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold">
                     {badge > 9 ? "9+" : badge}
                   </span>
                 )}
                 {isActive && (
-                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-primary" />
+                  <span className="bg-primary absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full" />
                 )}
               </button>
             )

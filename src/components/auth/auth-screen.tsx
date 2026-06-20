@@ -7,7 +7,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Mail, Lock, User, AtSign, Heart, Users, MessageCircle, Shield, Zap } from "lucide-react"
+import {
+  Loader2,
+  Mail,
+  Lock,
+  User,
+  AtSign,
+  Heart,
+  Users,
+  MessageCircle,
+  Shield,
+  Zap,
+} from "lucide-react"
 import { toast } from "sonner"
 
 export function AuthScreen() {
@@ -102,24 +113,26 @@ export function AuthScreen() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-background">
+    <div className="bg-background flex min-h-screen flex-col lg:flex-row">
       {/* Left: Brand showcase */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-primary">
-        <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20 text-white">
-          <div className="flex items-center gap-3 mb-8">
-            <span className="text-4xl font-bold tracking-tight">Conne<span className="text-primary-foreground/60">cta</span></span>
+      <div className="bg-primary relative hidden overflow-hidden lg:flex lg:w-1/2">
+        <div className="relative z-10 flex flex-col justify-center px-12 text-white xl:px-20">
+          <div className="mb-8 flex items-center gap-3">
+            <span className="text-4xl font-bold tracking-tight">
+              Conne<span className="text-primary-foreground/60">cta</span>
+            </span>
           </div>
-          <h1 className="text-4xl xl:text-5xl font-bold leading-tight mb-4">
+          <h1 className="mb-4 text-4xl leading-tight font-bold xl:text-5xl">
             Terhubung, Berbagi,
             <br />
             Berkembang Bersama.
           </h1>
-          <p className="text-lg text-white/80 mb-10 max-w-md">
-            Ruang digital yang aman, cepat, dan intuitif untuk mempererat hubungan
-            personal dan profesional Anda.
+          <p className="mb-10 max-w-md text-lg text-white/80">
+            Ruang digital yang aman, cepat, dan intuitif untuk mempererat hubungan personal dan
+            profesional Anda.
           </p>
 
-          <div className="space-y-4 max-w-md">
+          <div className="max-w-md space-y-4">
             <Feature
               icon={<Heart className="size-5" />}
               title="Berbagi Momen"
@@ -145,25 +158,25 @@ export function AuthScreen() {
       </div>
 
       {/* Right: Auth form */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
+      <div className="flex flex-1 items-center justify-center p-6 lg:p-12">
         <div className="w-full max-w-md">
           {/* Mobile brand */}
-          <div className="lg:hidden flex flex-col items-center mb-8">
-            <span className="text-3xl font-bold tracking-tight">Conne<span className="text-primary">cta</span></span>
-            <p className="text-sm text-muted-foreground mt-1">
-              Terhubung, Berbagi, Berkembang
-            </p>
+          <div className="mb-8 flex flex-col items-center lg:hidden">
+            <span className="text-3xl font-bold tracking-tight">
+              Conne<span className="text-primary">cta</span>
+            </span>
+            <p className="text-muted-foreground mt-1 text-sm">Terhubung, Berbagi, Berkembang</p>
           </div>
 
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-foreground">Selamat datang</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h2 className="text-foreground text-2xl font-bold">Selamat datang</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
               Masuk atau buat akun untuk mulai terhubung.
             </p>
           </div>
 
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className="mb-6 grid w-full grid-cols-2">
               <TabsTrigger value="login">Masuk</TabsTrigger>
               <TabsTrigger value="register">Daftar</TabsTrigger>
             </TabsList>
@@ -173,7 +186,7 @@ export function AuthScreen() {
                 <div className="space-y-2">
                   <Label htmlFor="login-email">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <Mail className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                     <Input
                       id="login-email"
                       type="email"
@@ -189,7 +202,7 @@ export function AuthScreen() {
                 <div className="space-y-2">
                   <Label htmlFor="login-password">Kata Sandi</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                     <Input
                       id="login-password"
                       type="password"
@@ -202,11 +215,7 @@ export function AuthScreen() {
                     />
                   </div>
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full text-white"
-                  disabled={loading !== null}
-                >
+                <Button type="submit" className="w-full" disabled={loading !== null}>
                   {loading === "login" ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
@@ -220,7 +229,7 @@ export function AuthScreen() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="w-full text-muted-foreground"
+                  className="text-muted-foreground w-full"
                   onClick={fillDemo}
                   disabled={loading !== null}
                 >
@@ -235,7 +244,7 @@ export function AuthScreen() {
                 <div className="space-y-2">
                   <Label htmlFor="reg-name">Nama Lengkap</Label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <User className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                     <Input
                       id="reg-name"
                       type="text"
@@ -251,14 +260,16 @@ export function AuthScreen() {
                 <div className="space-y-2">
                   <Label htmlFor="reg-username">Username</Label>
                   <div className="relative">
-                    <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <AtSign className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                     <Input
                       id="reg-username"
                       type="text"
                       placeholder="username"
                       className="pl-9"
                       value={regUsername}
-                      onChange={(e) => setRegUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
+                      onChange={(e) =>
+                        setRegUsername(e.target.value.toLowerCase().replace(/\s/g, ""))
+                      }
                       autoComplete="username"
                       disabled={loading !== null}
                     />
@@ -267,7 +278,7 @@ export function AuthScreen() {
                 <div className="space-y-2">
                   <Label htmlFor="reg-email">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <Mail className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                     <Input
                       id="reg-email"
                       type="email"
@@ -283,7 +294,7 @@ export function AuthScreen() {
                 <div className="space-y-2">
                   <Label htmlFor="reg-password">Kata Sandi</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <Lock className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                     <Input
                       id="reg-password"
                       type="password"
@@ -296,11 +307,7 @@ export function AuthScreen() {
                     />
                   </div>
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full text-white"
-                  disabled={loading !== null}
-                >
+                <Button type="submit" className="w-full" disabled={loading !== null}>
                   {loading === "register" ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
@@ -310,9 +317,9 @@ export function AuthScreen() {
                     "Buat Akun"
                   )}
                 </Button>
-                <p className="text-xs text-muted-foreground text-center">
-                  Dengan mendaftar, Anda menyetujui Ketentuan Layanan dan Kebijakan
-                  Privasi Connecta.
+                <p className="text-muted-foreground text-center text-xs">
+                  Dengan mendaftar, Anda menyetujui Ketentuan Layanan dan Kebijakan Privasi
+                  Connecta.
                 </p>
               </form>
             </TabsContent>
@@ -323,18 +330,10 @@ export function AuthScreen() {
   )
 }
 
-function Feature({
-  icon,
-  title,
-  desc,
-}: {
-  icon: React.ReactNode
-  title: string
-  desc: string
-}) {
+function Feature({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="size-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center ring-1 ring-white/20 shrink-0">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
         {icon}
       </div>
       <div>

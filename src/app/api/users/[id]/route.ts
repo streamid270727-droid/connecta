@@ -15,8 +15,10 @@ export async function GET(
     }
     const { id } = await params
 
+    // Support both userId and username lookup
+    const isCuid = /^c[a-z0-9]{20,}$/.test(id)
     const user = await db.user.findUnique({
-      where: { id },
+      where: isCuid ? { id } : { username: id },
       select: {
         id: true,
         name: true,
@@ -37,23 +39,25 @@ export async function GET(
       return NextResponse.json({ error: "User tidak ditemukan" }, { status: 404 })
     }
 
+    const userId = user.id
+
     // Friend status
     const isFriend = await db.friendship.findUnique({
       where: {
-        userId_friendId: { userId: session.user.id, friendId: id },
+        userId_friendId: { userId: session.user.id, friendId: userId },
       },
     })
 
     const sentRequest = await db.friendRequest.findFirst({
-      where: { senderId: session.user.id, recipientId: id, status: "pending" },
+      where: { senderId: session.user.id, recipientId: userId, status: "pending" },
     })
     const recvRequest = await db.friendRequest.findFirst({
-      where: { senderId: id, recipientId: session.user.id, status: "pending" },
+      where: { senderId: userId, recipientId: session.user.id, status: "pending" },
     })
 
     // Counts
-    const friendsCount = await db.friendship.count({ where: { userId: id } })
-    const postsCount = await db.post.count({ where: { authorId: id } })
+    const friendsCount = await db.friendship.count({ where: { userId } })
+    const postsCount = await db.post.count({ where: { authorId: userId } })
 
     // Recent posts (paginated via query param)
     const { searchParams } = new URL(request.url)
@@ -61,7 +65,7 @@ export async function GET(
     const limit = Math.min(parseInt(searchParams.get("limit") || "10"), 20)
 
     const posts = await db.post.findMany({
-      where: { authorId: id },
+      where: { authorId: userId },
       orderBy: { createdAt: "desc" },
       take: limit + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
@@ -76,7 +80,7 @@ export async function GET(
           },
         },
         _count: { select: { likes: true, comments: true, shares: true } },
-        likes: { where: { userId: session.user.id }, select: { id: true } },
+        likes: { select: { userId: true, emoji: true } },
         shares: { where: { userId: session.user.id }, select: { id: true } },
         savedBy: { where: { userId: session.user.id }, select: { id: true } },
         sharedFrom: {
@@ -100,9 +104,9 @@ export async function GET(
 
     // Friends list (only if current user is friend OR viewing own profile)
     let friends: any[] = []
-    if (isFriend || id === session.user.id) {
+    if (isFriend || userId === session.user.id) {
       const friendships = await db.friendship.findMany({
-        where: { userId: id },
+        where: { userId },
         take: 12,
         select: {
           friend: {
@@ -122,7 +126,7 @@ export async function GET(
     return NextResponse.json({
       user: {
         ...user,
-        isOwnProfile: id === session.user.id,
+        isOwnProfile: userId === session.user.id,
         isFriend: !!isFriend,
         friendRequestSent: !!sentRequest,
         friendRequestReceived: !!recvRequest,
@@ -131,28 +135,42 @@ export async function GET(
         postsCount,
       },
       friends,
-      posts: items.map((p) => ({
-        id: p.id,
-        content: p.content,
-        images: parseImages(p.images),
-        videoUrl: p.videoUrl,
-        createdAt: p.createdAt,
-        author: p.author,
-        liked: p.likes.length > 0,
-        shared: p.shares.length > 0,
-        saved: p.savedBy.length > 0,
-        _count: p._count,
-        sharedFrom: p.sharedFrom
-          ? {
-              id: p.sharedFrom.id,
-              content: p.sharedFrom.content,
-              images: parseImages(p.sharedFrom.images),
-              videoUrl: p.sharedFrom.videoUrl,
-              createdAt: p.sharedFrom.createdAt,
-              author: p.sharedFrom.author,
-            }
-          : null,
-      })),
+      posts: items.map((p) => {
+        const userLike = p.likes.find((l) => l.userId === session.user.id)
+        const reactionMap: Record<string, number> = {}
+        for (const l of p.likes) {
+          if (l.emoji) {
+            reactionMap[l.emoji] = (reactionMap[l.emoji] || 0) + 1
+          }
+        }
+        const reactionSummary = Object.entries(reactionMap)
+          .map(([emoji, count]) => ({ emoji, count }))
+          .sort((a, b) => b.count - a.count)
+        return {
+          id: p.id,
+          content: p.content,
+          images: parseImages(p.images),
+          videoUrl: p.videoUrl,
+          createdAt: p.createdAt,
+          author: p.author,
+          liked: !!userLike,
+          emoji: userLike?.emoji || null,
+          reactionSummary,
+          shared: p.shares.length > 0,
+          saved: p.savedBy.length > 0,
+          _count: p._count,
+          sharedFrom: p.sharedFrom
+            ? {
+                id: p.sharedFrom.id,
+                content: p.sharedFrom.content,
+                images: parseImages(p.sharedFrom.images),
+                videoUrl: p.sharedFrom.videoUrl,
+                createdAt: p.sharedFrom.createdAt,
+                author: p.sharedFrom.author,
+              }
+            : null,
+        }
+      }),
       nextCursor: hasMore ? items[items.length - 1].id : null,
     })
   } catch (error) {

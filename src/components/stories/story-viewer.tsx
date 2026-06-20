@@ -79,7 +79,9 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
         const data = await res.json()
         if (isOwn) setViews(data.viewCount)
       }
-    } catch {}
+    } catch (e) {
+      console.error("Failed to track story view:", e)
+    }
   }, [isOwn])
 
   const handleReaction = useCallback(async (emoji: string) => {
@@ -124,7 +126,9 @@ export function StoryViewer({ groups, initialGroupIdx, onClose }: StoryViewerPro
         setReplyText("")
         toast({ title: "Terkirim", description: "Balasan story terkirim" })
       }
-    } catch {}
+    } catch (e) {
+      console.error("Failed to send story reply:", e)
+    }
     setSendingReply(false)
   }, [currentStory, replyText, sendingReply, toast])
 

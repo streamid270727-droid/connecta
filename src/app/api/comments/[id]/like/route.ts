@@ -55,7 +55,9 @@ export async function POST(
           type: "like",
           entityId: id,
         })
-      } catch {}
+      } catch (e) {
+        console.error("Failed to send comment like notification:", e)
+      }
     }
 
     return NextResponse.json({ liked: true, count })

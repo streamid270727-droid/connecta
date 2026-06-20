@@ -382,7 +382,9 @@ export function ProfileView() {
             : `${user.name} telah dibuka blokirannya`,
         })
       }
-    } catch {}
+    } catch (e) {
+      console.error("Failed to toggle block:", e)
+    }
     setBlocking(false)
   }
 

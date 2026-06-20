@@ -16,6 +16,7 @@ import {
   Play,
   Pencil,
   X,
+  Flag,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -57,6 +58,7 @@ export interface FeedPost {
   }
   liked: boolean
   emoji?: string | null
+  reactionSummary?: { emoji: string; count: number }[]
   shared: boolean
   saved?: boolean
   _count: { likes: number; comments: number; shares: number }
@@ -102,10 +104,48 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
     setShowReactionPicker(false)
     const wasLiked = post.liked
     const wasEmoji = (post as any).emoji || null
+    const wasSummary = post.reactionSummary || []
+
+    // Compute optimistic reactionSummary
+    let newSummary = [...wasSummary]
+    if (wasLiked && (!emoji || wasEmoji === emoji)) {
+      // Removing reaction
+      if (wasEmoji) {
+        const idx = newSummary.findIndex((r) => r.emoji === wasEmoji)
+        if (idx !== -1) {
+          if (newSummary[idx].count <= 1) newSummary.splice(idx, 1)
+          else newSummary[idx] = { ...newSummary[idx], count: newSummary[idx].count - 1 }
+        }
+      }
+    } else if (wasLiked && emoji && wasEmoji !== emoji) {
+      // Changing reaction
+      if (wasEmoji) {
+        const idx = newSummary.findIndex((r) => r.emoji === wasEmoji)
+        if (idx !== -1) {
+          if (newSummary[idx].count <= 1) newSummary.splice(idx, 1)
+          else newSummary[idx] = { ...newSummary[idx], count: newSummary[idx].count - 1 }
+        }
+      }
+      if (emoji) {
+        const idx = newSummary.findIndex((r) => r.emoji === emoji)
+        if (idx !== -1) newSummary[idx] = { ...newSummary[idx], count: newSummary[idx].count + 1 }
+        else newSummary.push({ emoji, count: 1 })
+      }
+    } else {
+      // Adding new reaction
+      if (emoji) {
+        const idx = newSummary.findIndex((r) => r.emoji === emoji)
+        if (idx !== -1) newSummary[idx] = { ...newSummary[idx], count: newSummary[idx].count + 1 }
+        else newSummary.push({ emoji, count: 1 })
+      }
+    }
+    newSummary.sort((a, b) => b.count - a.count)
+
     // Optimistic update
     onUpdate(post.id, {
       liked: !wasLiked || !!(emoji && wasEmoji !== emoji),
       emoji: emoji || null,
+      reactionSummary: newSummary,
       _count: {
         ...post._count,
         likes: wasLiked && (!emoji || wasEmoji === emoji)
@@ -125,6 +165,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
       onUpdate(post.id, {
         liked: data.liked,
         emoji: data.emoji,
+        reactionSummary: data.reactionSummary,
         _count: { ...post._count, likes: data.count },
       })
     } catch {
@@ -132,6 +173,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
       onUpdate(post.id, {
         liked: wasLiked,
         emoji: wasEmoji,
+        reactionSummary: wasSummary,
         _count: {
           ...post._count,
           likes: wasLiked ? post._count.likes : post._count.likes - 1,
@@ -209,6 +251,26 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
     }
   }
 
+  const handleReport = async () => {
+    const reason = prompt("Alasan melaporkan postingan ini:")
+    if (!reason?.trim()) return
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId: post.id, targetType: "post", reason: reason.trim() }),
+      })
+      if (res.ok) {
+        toast({ title: "Terlaporkan", description: "Laporan Anda akan segera ditinjau" })
+      } else {
+        const data = await res.json()
+        toast({ title: "Gagal", description: data.error, variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Terjadi kesalahan", variant: "destructive" })
+    }
+  }
+
   const toggleComments = () => setShowComments((v) => !v)
 
   return (
@@ -260,6 +322,12 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
                 )}
                 {post.saved ? "Hapus dari Simpanan" : "Simpan"}
               </DropdownMenuItem>
+              {!isOwn && (
+                <DropdownMenuItem onClick={() => handleReport()}>
+                  <Flag className="size-4" />
+                  Laporkan
+                </DropdownMenuItem>
+              )}
               {isOwn && (
                 <>
                   <DropdownMenuSeparator />
@@ -284,7 +352,7 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
         {post.content && (
           <div className="px-3 sm:px-4 pb-3">
             <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-              {renderContentWithLinks(post.content)}
+              <ContentWithLinks content={post.content} />
             </p>
           </div>
         )}
@@ -356,14 +424,23 @@ export function PostCard({ post, onUpdate, onDelete }: PostCardProps) {
             <div className="flex items-center gap-1">
               {post._count.likes > 0 && (
                 <span className="flex items-center gap-1">
-                  {(post as any).emoji ? (
-                    <span className="text-sm leading-none">{(post as any).emoji}</span>
-                  ) : (
-                    <span className="size-4 rounded-full bg-rose-500 flex items-center justify-center">
-                      <Heart className="size-2.5 fill-white text-white" />
+                  {post.reactionSummary && post.reactionSummary.length > 0 ? (
+                    <span className="flex items-center gap-1">
+                      {post.reactionSummary.map((r) => (
+                        <span key={r.emoji} className="flex items-center gap-0.5">
+                          <span className="text-sm leading-none">{r.emoji}</span>
+                          <span>{r.count}</span>
+                        </span>
+                      ))}
                     </span>
+                  ) : (
+                    <>
+                      <span className="size-4 rounded-full bg-rose-500 flex items-center justify-center">
+                        <Heart className="size-2.5 fill-white text-white" />
+                      </span>
+                      <span>{formatNumber(post._count.likes)}</span>
+                    </>
                   )}
-                  <span>{formatNumber(post._count.likes)}</span>
                 </span>
               )}
             </div>
@@ -941,36 +1018,59 @@ function VideoEmbed({
   return null
 }
 
-function renderContentWithLinks(content: string) {
-  // Split by URLs and @mentions
-  const parts = content.split(/(https?:\/\/[^\s]+|@\w+)/g)
-  return parts.map((part, i) => {
-    if (/^https?:\/\//.test(part)) {
-      return (
-        <a
-          key={i}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary hover:underline break-all"
-        >
-          {part}
-        </a>
-      )
-    }
-    if (/^@\w+$/.test(part)) {
-      const username = part.slice(1)
-      return (
-        <a
-          key={i}
-          href={`/profile/${username}`}
-          className="text-primary hover:underline font-medium"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {part}
-        </a>
-      )
-    }
-    return <span key={i}>{part}</span>
-  })
+function ContentWithLinks({ content }: { content: string }) {
+  const { openProfile, setView, setSearchQuery } = useAppStore()
+  // Split by URLs, @mentions, and #hashtags
+  const parts = content.split(/(https?:\/\/[^\s]+|@\w+|#[\w]+)/g)
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (/^https?:\/\//.test(part)) {
+          return (
+            <a
+              key={i}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline break-all"
+            >
+              {part}
+            </a>
+          )
+        }
+        if (/^@\w+$/.test(part)) {
+          const username = part.slice(1)
+          return (
+            <button
+              key={i}
+              onClick={(e) => {
+                e.stopPropagation()
+                openProfile(username)
+              }}
+              className="text-primary hover:underline font-medium"
+            >
+              {part}
+            </button>
+          )
+        }
+        if (/^#[\w]+$/.test(part)) {
+          const tag = part.slice(1)
+          return (
+            <button
+              key={i}
+              onClick={(e) => {
+                e.stopPropagation()
+                setSearchQuery(tag)
+                setView("search")
+              }}
+              className="text-primary hover:underline font-medium"
+            >
+              {part}
+            </button>
+          )
+        }
+        return <span key={i}>{part}</span>
+      })}
+    </>
+  )
 }

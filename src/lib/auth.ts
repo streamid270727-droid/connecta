@@ -68,7 +68,9 @@ export const authOptions: NextAuthOptions = {
             session.user.image = dbUser.avatarUrl
             session.user.name = dbUser.name
           }
-        } catch {}
+        } catch (e) {
+          console.error("Failed to fetch user session data:", e)
+        }
       }
       return session
     },

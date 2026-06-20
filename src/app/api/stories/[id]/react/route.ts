@@ -70,7 +70,9 @@ export async function POST(
           type: "story_reaction",
           entityId: storyId,
         })
-      } catch {}
+      } catch (e) {
+        console.error("Failed to send story reaction notification:", e)
+      }
     }
 
     return NextResponse.json({ action, emoji: reaction.emoji })

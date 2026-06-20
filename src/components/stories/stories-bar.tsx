@@ -221,7 +221,7 @@ const STORY_GRADIENTS = [
   { id: "g8", class: "from-indigo-500 to-violet-700", color: "#ffffff" },
 ]
 
-function StoryComposer({
+export function StoryComposer({
   open,
   onOpenChange,
   onCreated,

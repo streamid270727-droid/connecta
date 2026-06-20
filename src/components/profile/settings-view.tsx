@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { useToast } from "@/hooks/use-toast"
 import { useTheme } from "next-themes"
@@ -152,8 +153,8 @@ export function SettingsView() {
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "Ukuran maksimal 5MB", variant: "destructive" })
+    if (file.size > 4 * 1024 * 1024) {
+      toast({ title: "Ukuran maksimal 4MB", variant: "destructive" })
       return
     }
     setUploadingCover(true)
@@ -559,17 +560,7 @@ export function SettingsView() {
               <CardDescription>Lindungi akun Anda</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center justify-between gap-3 p-3 rounded-lg border">
-                <div>
-                  <div className="text-sm font-medium">Kata Sandi</div>
-                  <div className="text-xs text-muted-foreground">
-                    Ubah kata sandi secara berkala.
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" disabled>
-                  Segera Hadir
-                </Button>
-              </div>
+              <ChangePasswordButton />
               {user.isVerified ? (
                 <div className="flex items-center gap-2 p-3 rounded-lg border bg-primary/5">
                   <CheckCircle2 className="size-4 text-primary shrink-0" />
@@ -629,6 +620,8 @@ export function SettingsView() {
             </p>
           </CardContent>
         </Card>
+
+        <DeleteAccountButton />
 
         {/* Bahasa */}
         <Card>
@@ -725,5 +718,189 @@ function SettingsSkeleton() {
         ))}
       </div>
     </div>
+  )
+}
+
+function ChangePasswordButton() {
+  const { toast } = useToast()
+  const [open, setOpen] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!currentPassword || !newPassword) {
+      toast({ title: "Mohon isi semua kolom", variant: "destructive" })
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Password baru tidak cocok", variant: "destructive" })
+      return
+    }
+    if (newPassword.length < 6) {
+      toast({ title: "Password baru minimal 6 karakter", variant: "destructive" })
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch("/api/users/me/password", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast({ title: "Gagal", description: data.error, variant: "destructive" })
+      } else {
+        toast({ title: "Berhasil", description: "Kata sandi telah diubah" })
+        setOpen(false)
+        setCurrentPassword("")
+        setNewPassword("")
+        setConfirmPassword("")
+      }
+    } catch {
+      toast({ title: "Terjadi kesalahan", variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3 p-3 rounded-lg border">
+        <div>
+          <div className="text-sm font-medium">Kata Sandi</div>
+          <div className="text-xs text-muted-foreground">
+            Ubah kata sandi secara berkala.
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          Ubah
+        </Button>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Ubah Kata Sandi</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="current-pw">Password Saat Ini</Label>
+              <Input
+                id="current-pw"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-pw">Password Baru</Label>
+              <Input
+                id="new-pw"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-pw">Konfirmasi Password Baru</Label>
+              <Input
+                id="confirm-pw"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+            <Button
+              className="w-full"
+              onClick={handleSubmit}
+              disabled={loading || !currentPassword || !newPassword}
+            >
+              {loading && <Loader2 className="size-4 mr-2 animate-spin" />}
+              Simpan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function DeleteAccountButton() {
+  const { toast } = useToast()
+  const [open, setOpen] = useState(false)
+  const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  const handleDelete = async () => {
+    if (!password) {
+      toast({ title: "Masukkan password", variant: "destructive" })
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch("/api/users/me/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast({ title: "Gagal", description: data.error, variant: "destructive" })
+      } else {
+        toast({ title: "Akun dihapus" })
+        signOut({ callbackUrl: "/" })
+      }
+    } catch {
+      toast({ title: "Terjadi kesalahan", variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5">
+        <div>
+          <div className="text-sm font-medium text-destructive">Hapus Akun</div>
+          <div className="text-xs text-muted-foreground">
+            Tindakan ini tidak dapat dibatalkan.
+          </div>
+        </div>
+        <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
+          Hapus
+        </Button>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Hapus Akun</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Semua data Anda akan dihapus secara permanen. Ketik password untuk konfirmasi.
+            </p>
+            <Input
+              type="password"
+              placeholder="Masukkan password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={handleDelete}
+              disabled={loading || !password}
+            >
+              {loading && <Loader2 className="size-4 mr-2 animate-spin" />}
+              Hapus Akun Saya
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

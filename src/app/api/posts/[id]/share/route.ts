@@ -72,7 +72,9 @@ export async function POST(
           type: "share",
           entityId: sharedPost.id,
         })
-      } catch {}
+      } catch (e) {
+        console.error("Failed to send share notification:", e)
+      }
     }
 
     return NextResponse.json({

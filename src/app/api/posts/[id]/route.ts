@@ -57,7 +57,7 @@ export async function GET(
           },
         },
         _count: { select: { likes: true, comments: true, shares: true } },
-        likes: { where: { userId: session.user.id }, select: { id: true } },
+        likes: { select: { userId: true, emoji: true } },
         shares: { where: { userId: session.user.id }, select: { id: true } },
         savedBy: { where: { userId: session.user.id }, select: { id: true } },
         sharedFrom: {
@@ -79,6 +79,16 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
     const { parseImages } = await import("@/lib/format")
+    const userLike = post.likes.find((l) => l.userId === session.user.id)
+    const reactionMap: Record<string, number> = {}
+    for (const l of post.likes) {
+      if (l.emoji) {
+        reactionMap[l.emoji] = (reactionMap[l.emoji] || 0) + 1
+      }
+    }
+    const reactionSummary = Object.entries(reactionMap)
+      .map(([emoji, count]) => ({ emoji, count }))
+      .sort((a, b) => b.count - a.count)
     return NextResponse.json({
       post: {
         id: post.id,
@@ -87,7 +97,9 @@ export async function GET(
         videoUrl: post.videoUrl,
         createdAt: post.createdAt,
         author: post.author,
-        liked: post.likes.length > 0,
+        liked: !!userLike,
+        emoji: userLike?.emoji || null,
+        reactionSummary,
         shared: post.shares.length > 0,
         saved: post.savedBy.length > 0,
         _count: post._count,

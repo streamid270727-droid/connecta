@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { parseImages } from "@/lib/format"
+import { rateLimit } from "@/lib/rate-limit"
 import { z } from "zod"
 
 const createPostSchema = z.object({
@@ -59,8 +60,7 @@ export async function GET(request: Request) {
           },
         },
         likes: {
-          where: { userId: session.user.id },
-          select: { id: true, emoji: true },
+          select: { userId: true, emoji: true },
         },
         shares: {
           where: { userId: session.user.id },
@@ -91,29 +91,42 @@ export async function GET(request: Request) {
     const nextCursor = hasMore ? items[items.length - 1].id : null
 
     return NextResponse.json({
-      posts: items.map((p) => ({
-        id: p.id,
-        content: p.content,
-        images: parseImages(p.images),
-        videoUrl: p.videoUrl,
-        createdAt: p.createdAt,
-        author: p.author,
-        liked: p.likes.length > 0,
-        emoji: p.likes[0]?.emoji || null,
-        shared: p.shares.length > 0,
-        saved: p.savedBy.length > 0,
-        _count: p._count,
-        sharedFrom: p.sharedFrom
-          ? {
-              id: p.sharedFrom.id,
-              content: p.sharedFrom.content,
-              images: parseImages(p.sharedFrom.images),
-              videoUrl: p.sharedFrom.videoUrl,
-              createdAt: p.sharedFrom.createdAt,
-              author: p.sharedFrom.author,
-            }
-          : null,
-      })),
+      posts: items.map((p) => {
+        const userLike = p.likes.find((l) => l.userId === session.user.id)
+        const reactionMap: Record<string, number> = {}
+        for (const l of p.likes) {
+          if (l.emoji) {
+            reactionMap[l.emoji] = (reactionMap[l.emoji] || 0) + 1
+          }
+        }
+        const reactionSummary = Object.entries(reactionMap)
+          .map(([emoji, count]) => ({ emoji, count }))
+          .sort((a, b) => b.count - a.count)
+        return {
+          id: p.id,
+          content: p.content,
+          images: parseImages(p.images),
+          videoUrl: p.videoUrl,
+          createdAt: p.createdAt,
+          author: p.author,
+          liked: !!userLike,
+          emoji: userLike?.emoji || null,
+          reactionSummary,
+          shared: p.shares.length > 0,
+          saved: p.savedBy.length > 0,
+          _count: p._count,
+          sharedFrom: p.sharedFrom
+            ? {
+                id: p.sharedFrom.id,
+                content: p.sharedFrom.content,
+                images: parseImages(p.sharedFrom.images),
+                videoUrl: p.sharedFrom.videoUrl,
+                createdAt: p.sharedFrom.createdAt,
+                author: p.sharedFrom.author,
+              }
+            : null,
+        }
+      }),
       nextCursor,
     })
   } catch (error) {
@@ -127,6 +140,12 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Rate limit: 10 posts per minute per user
+    const { success } = rateLimit(`posts:${session.user.id}`, 10, 60000)
+    if (!success) {
+      return NextResponse.json({ error: "Terlalu banyak postingan. Coba lagi dalam 1 menit." }, { status: 429 })
     }
 
     const body = await request.json()
@@ -189,7 +208,9 @@ export async function POST(request: Request) {
             type: "share",
             entityId: post.id,
           })
-        } catch {}
+        } catch (e) {
+          console.error("Failed to send share notification:", e)
+        }
       }
     }
 

@@ -104,7 +104,9 @@ export async function POST(
           type: "message",
           entityId: conversation.id,
         })
-      } catch {}
+      } catch (e) {
+        console.error("Failed to send story reply notification:", e)
+      }
     }
 
     return NextResponse.json({ reply })

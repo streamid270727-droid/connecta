@@ -153,7 +153,9 @@ export async function POST(
             type: "reply",
             entityId: comment.id,
           })
-        } catch {}
+        } catch (e) {
+          console.error("Failed to send reply notification:", e)
+        }
       }
 
       return NextResponse.json({
@@ -207,7 +209,9 @@ export async function POST(
           type: "comment",
           entityId: comment.id,
         })
-      } catch {}
+      } catch (e) {
+        console.error("Failed to send comment notification:", e)
+      }
     }
 
     return NextResponse.json({

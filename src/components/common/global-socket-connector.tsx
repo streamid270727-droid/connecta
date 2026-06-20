@@ -140,7 +140,9 @@ async function refreshMessageCount() {
       const data = await res.json()
       useAppStore.getState().setUnreadMessages(data.unreadCount || 0)
     }
-  } catch {}
+  } catch (e) {
+    console.error("Failed to refresh message count:", e)
+  }
 }
 async function refreshNotifCount() {
   try {
@@ -149,5 +151,7 @@ async function refreshNotifCount() {
       const data = await res.json()
       useAppStore.getState().setUnreadNotifications(data.unreadCount || 0)
     }
-  } catch {}
+  } catch (e) {
+    console.error("Failed to refresh notification count:", e)
+  }
 }

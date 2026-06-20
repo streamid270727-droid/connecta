@@ -47,6 +47,7 @@ model User {
   savedPosts         SavedPost[]
   blockedUsers       BlockedUser[]  @relation("Blocker")
   blockedBy          BlockedUser[]  @relation("Blocked")
+  reports            Report[]       @relation("Reporter")
 
   // Friend relations (self-referencing many-to-many)
   friendsOf          Friendship[]        @relation("FriendshipUser")
@@ -353,5 +354,22 @@ model BlockedUser {
   @@unique([blockerId, blockedId])
   @@index([blockerId])
   @@index([blockedId])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  targetId   String
+  targetType String   // "post" | "comment" | "user"
+  reason     String
+  content    String?
+  status     String   @default("pending") // "pending" | "reviewed" | "resolved"
+  createdAt  DateTime @default(now())
+
+  reporter   User     @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([reporterId])
+  @@index([targetId])
+  @@index([status])
 }
 

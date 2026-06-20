@@ -156,7 +156,7 @@ io.on("connection", (socket: Socket) => {
   })
 })
 
-const PORT = 3003
+const PORT = parseInt(process.env.CHAT_SERVICE_PORT || "3003")
 httpServer.listen(PORT, () => {
   console.log(`[chat-service] Connecta WebSocket server running on port ${PORT}`)
 })

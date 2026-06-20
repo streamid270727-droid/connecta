@@ -170,7 +170,9 @@ export function CommentSection({ postId, commentCount }: CommentSectionProps) {
           )
         )
       }
-    } catch {}
+    } catch (e) {
+      console.error("Failed to toggle comment like:", e)
+    }
   }
 
   const editComment = async (commentId: string, newContent: string, isReply: boolean, parentId?: string) => {

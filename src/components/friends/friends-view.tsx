@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -81,9 +81,9 @@ export function FriendsView() {
   const suggestions = suggestionsQuery.data ?? []
 
   // Sync pending count to store
-  if (requests.length > 0) {
+  useEffect(() => {
     setPendingFriendRequests(requests.length)
-  }
+  }, [requests.length, setPendingFriendRequests])
 
   const filteredFriends = useMemo(() => {
     const q = searchInput.trim().toLowerCase()

@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ unreadCount })
     }
 
-    // Fetch all conversations the current user participates in
+    // Fetch conversations the current user participates in (limit 50)
     const conversations = await db.conversation.findMany({
       where: {
         OR: [
@@ -32,6 +32,7 @@ export async function GET(request: Request) {
           { user2Id: session.user.id },
         ],
       },
+      take: 50,
       include: {
         user1: {
           select: {

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { TrendingUp, UserPlus, Hash, Flame, Activity } from "lucide-react"
 import { useAppStore } from "@/lib/store"
@@ -26,6 +27,7 @@ export function RightSidebar() {
   const { data: session } = useSession()
   const { openProfile, openConversation, setSearchQuery, setView } = useAppStore()
   const qc = useQueryClient()
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set())
 
   const suggestionsQuery = useFriendSuggestions()
   const sendRequestMutation = useSendFriendRequest()
@@ -61,6 +63,7 @@ export function RightSidebar() {
   const sendRequest = async (userId: string) => {
     try {
       await sendRequestMutation.mutateAsync(userId)
+      setSentIds((prev) => new Set([...prev, userId]))
     } catch {
       // ignore
     }
@@ -182,12 +185,12 @@ export function RightSidebar() {
                   </p>
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant={sentIds.has(user.id) ? "secondary" : "outline"}
                     className="mt-1.5 h-7 px-2.5 text-xs"
                     onClick={() => sendRequest(user.id)}
-                    disabled={sendRequestMutation.isPending}
+                    disabled={sendRequestMutation.isPending || sentIds.has(user.id)}
                   >
-                    Tambah
+                    {sentIds.has(user.id) ? "Terkirim" : "Tambah"}
                   </Button>
                 </div>
               </div>

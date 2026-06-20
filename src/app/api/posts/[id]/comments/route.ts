@@ -24,9 +24,13 @@ export async function GET(
     }
     const { id } = await params
 
+    const url = new URL(request.url)
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "50"), 100)
+
     const comments = await db.comment.findMany({
       where: { postId: id, parentId: null },
       orderBy: { createdAt: "asc" },
+      take: limit,
       include: {
         author: {
           select: {
@@ -39,6 +43,7 @@ export async function GET(
         },
         replies: {
           orderBy: { createdAt: "asc" },
+          take: 20,
           include: {
             author: {
               select: {

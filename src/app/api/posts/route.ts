@@ -38,14 +38,14 @@ export async function GET(request: Request) {
     const limit = Math.min(parseInt(searchParams.get("limit") || "10"), 20)
     const scope = searchParams.get("scope") || "all" // all | friends | discover
 
-    // Get user's friends
-    const friendships = await db.friendship.findMany({
-      where: { userId: session.user.id },
-      select: { friendId: true },
-    })
-    const friendIds = friendships.map((f) => f.friendId)
+    // Get user's friends (only needed for friends scope)
     const authorIds =
-      scope === "friends" ? [...friendIds, session.user.id] : undefined
+      scope === "friends"
+        ? (await db.friendship.findMany({
+            where: { userId: session.user.id },
+            select: { friendId: true },
+          })).map((f) => f.friendId).concat(session.user.id)
+        : undefined
 
     const posts = await db.post.findMany({
       where: authorIds ? { authorId: { in: authorIds } } : {},
@@ -68,9 +68,6 @@ export async function GET(request: Request) {
             comments: true,
             shares: true,
           },
-        },
-        likes: {
-          select: { userId: true, emoji: true },
         },
         shares: {
           where: { userId: session.user.id },
@@ -100,18 +97,34 @@ export async function GET(request: Request) {
     const items = hasMore ? posts.slice(0, limit) : posts
     const nextCursor = hasMore ? items[items.length - 1].id : null
 
+    const postIds = posts.map((p) => p.id)
+
+    // Batch-fetch current user's likes for these posts
+    const myLikes = await db.like.findMany({
+      where: { postId: { in: postIds }, userId: session.user.id },
+      select: { postId: true, emoji: true },
+    })
+    const myLikeMap = new Map(myLikes.map((l) => [l.postId, l.emoji]))
+
+    // Batch-fetch reaction summaries (top emojis per post)
+    const reactionRows = await db.$queryRawUnsafe<Array<{ postId: string; emoji: string; cnt: bigint }>>(
+      `SELECT "postId", COALESCE(emoji, '__plain__') as emoji, COUNT(*) as cnt
+       FROM "Like" WHERE "postId" = ANY($1::text[]) AND emoji IS NOT NULL
+       GROUP BY "postId", emoji ORDER BY cnt DESC`,
+      postIds
+    )
+    const reactionMapByPost = new Map<string, Array<{ emoji: string; count: number }>>()
+    for (const row of reactionRows) {
+      if (row.emoji === "__plain__") continue
+      let arr = reactionMapByPost.get(row.postId)
+      if (!arr) { arr = []; reactionMapByPost.set(row.postId, arr) }
+      if (arr.length < 5) arr.push({ emoji: row.emoji, count: Number(row.cnt) })
+    }
+
     return NextResponse.json({
       posts: items.map((p) => {
-        const userLike = p.likes.find((l) => l.userId === session.user.id)
-        const reactionMap: Record<string, number> = {}
-        for (const l of p.likes) {
-          if (l.emoji) {
-            reactionMap[l.emoji] = (reactionMap[l.emoji] || 0) + 1
-          }
-        }
-        const reactionSummary = Object.entries(reactionMap)
-          .map(([emoji, count]) => ({ emoji, count }))
-          .sort((a, b) => b.count - a.count)
+        const emoji = myLikeMap.get(p.id) || null
+        const reactionSummary = reactionMapByPost.get(p.id) || []
         return {
           id: p.id,
           content: p.content,
@@ -120,8 +133,8 @@ export async function GET(request: Request) {
           linkPreview: p.linkPreview ? JSON.parse(p.linkPreview) : null,
           createdAt: p.createdAt,
           author: p.author,
-          liked: !!userLike,
-          emoji: userLike?.emoji || null,
+          liked: emoji !== null || myLikeMap.has(p.id),
+          emoji,
           reactionSummary,
           shared: p.shares.length > 0,
           saved: p.savedBy.length > 0,

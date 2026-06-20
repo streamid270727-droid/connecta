@@ -45,10 +45,6 @@ export async function GET() {
         username: true,
         avatarUrl: true,
         bio: true,
-        friendsOf: {
-          where: { userId: currentUserId },
-          select: { id: true },
-        },
       },
       take: 100,
     })
@@ -57,13 +53,29 @@ export async function GET() {
     const eligible = candidates.filter(
       (c) =>
         !myFriendIds.has(c.id) &&
-        !pendingUserIds.has(c.id) &&
-        c.friendsOf.length === 0
+        !pendingUserIds.has(c.id)
     )
 
-    // For computing mutual friends: need friends list of each candidate
-    // Limit work to first 30 eligible users to keep performance reasonable
+    // For computing mutual friends: batch-fetch all friendships for top candidates
     const topEligible = eligible.slice(0, 30)
+    const candidateIds = topEligible.map((c) => c.id)
+
+    // Single query to get all friendships where userId is one of the candidates
+    const candidateFriendships = await db.friendship.findMany({
+      where: { userId: { in: candidateIds } },
+      select: { userId: true, friendId: true },
+    })
+
+    // Build a map: candidateId -> Set of their friendIds
+    const candidateFriendsMap = new Map<string, Set<string>>()
+    for (const cf of candidateFriendships) {
+      let set = candidateFriendsMap.get(cf.userId)
+      if (!set) {
+        set = new Set()
+        candidateFriendsMap.set(cf.userId, set)
+      }
+      set.add(cf.friendId)
+    }
 
     const suggestions: Array<{
       id: string
@@ -75,15 +87,7 @@ export async function GET() {
     }> = []
 
     for (const c of topEligible) {
-      // Get candidate's friend ids
-      const candidateFriendships = await db.friendship.findMany({
-        where: { userId: c.id },
-        select: { friendId: true },
-      })
-      const candidateFriendIds = new Set(
-        candidateFriendships.map((f) => f.friendId)
-      )
-      // Mutual = intersection of myFriendIds and candidateFriendIds
+      const candidateFriendIds = candidateFriendsMap.get(c.id) ?? new Set()
       let mutual = 0
       for (const fid of myFriendIds) {
         if (candidateFriendIds.has(fid)) mutual++

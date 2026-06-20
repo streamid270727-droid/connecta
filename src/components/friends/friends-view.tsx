@@ -63,6 +63,7 @@ export function FriendsView() {
   const [activeTab, setActiveTab] = useState<TabValue>("all")
   const [searchInput, setSearchInput] = useState("")
   const [confirmUnfriend, setConfirmUnfriend] = useState<Friend | null>(null)
+  const [sentRequestIds, setSentRequestIds] = useState<Set<string>>(new Set())
 
   // Queries
   const friendsQuery = useFriends()
@@ -113,6 +114,7 @@ export function FriendsView() {
   const handleSendRequest = async (suggestionId: string) => {
     try {
       const result = await sendRequestMutation.mutateAsync(suggestionId)
+      setSentRequestIds((prev) => new Set([...prev, suggestionId]))
       if (result.status === "friends") {
         toast({ title: "Berhasil", description: "Kalian kini berteman" })
       } else {
@@ -239,7 +241,7 @@ export function FriendsView() {
                 error={suggestionsQuery.error ? "Gagal memuat saran" : null}
                 onRetry={() => suggestionsQuery.refetch()}
                 requestingId={sendRequestMutation.isPending ? "loading" : null}
-                sentRequestIds={new Set()}
+                sentRequestIds={sentRequestIds}
                 onSendRequest={handleSendRequest}
                 onViewProfile={openProfile}
               />

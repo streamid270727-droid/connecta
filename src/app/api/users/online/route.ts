@@ -28,28 +28,34 @@ export async function GET() {
       },
     })
 
-    // For each friend, find their most recent activity (post or message)
-    const friendsWithActivity = await Promise.all(
-      friendships.map(async (f) => {
-        const lastPost = await db.post.findFirst({
-          where: { authorId: f.friend.id },
-          orderBy: { createdAt: "desc" },
-          select: { createdAt: true },
-        })
-        const lastMsg = await db.directMessage.findFirst({
-          where: { senderId: f.friend.id },
-          orderBy: { createdAt: "desc" },
-          select: { createdAt: true },
-        })
-        const lastActivity = lastPost && lastMsg
-          ? (lastPost.createdAt > lastMsg.createdAt ? lastPost.createdAt : lastMsg.createdAt)
-          : lastPost?.createdAt || lastMsg?.createdAt || new Date(0)
-        return {
-          ...f.friend,
-          lastActivity,
-        }
-      })
-    )
+    const friendIds = friendships.map((f) => f.friend.id)
+
+    // Batch-fetch last post and last message for all friends (2 queries instead of 2N)
+    const [lastPosts, lastMsgs] = await Promise.all([
+      db.$queryRawUnsafe<{ authorId: string; maxCreated: Date }[]>(
+        `SELECT "authorId", MAX("createdAt") as "maxCreated" FROM "Post" WHERE "authorId" = ANY($1::text[]) GROUP BY "authorId"`,
+        friendIds
+      ),
+      db.$queryRawUnsafe<{ senderId: string; maxCreated: Date }[]>(
+        `SELECT "senderId", MAX("createdAt") as "maxCreated" FROM "DirectMessage" WHERE "senderId" = ANY($1::text[]) GROUP BY "senderId"`,
+        friendIds
+      ),
+    ])
+
+    const lastPostMap = new Map(lastPosts.map((p) => [p.authorId, p.maxCreated]))
+    const lastMsgMap = new Map(lastMsgs.map((m) => [m.senderId, m.maxCreated]))
+
+    const friendsWithActivity = friendships.map((f) => {
+      const lastPost = lastPostMap.get(f.friend.id)
+      const lastMsg = lastMsgMap.get(f.friend.id)
+      const lastActivity = lastPost && lastMsg
+        ? (lastPost > lastMsg ? lastPost : lastMsg)
+        : lastPost || lastMsg || new Date(0)
+      return {
+        ...f.friend,
+        lastActivity,
+      }
+    })
 
     // Sort by most recent activity, take top 6
     const online = friendsWithActivity

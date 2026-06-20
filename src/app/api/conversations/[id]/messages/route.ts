@@ -43,10 +43,16 @@ export async function GET(
         ? conversation.user2Id
         : conversation.user1Id
 
-    // Fetch all messages ordered oldest -> newest
+    // Fetch messages with pagination (latest 100 by default)
+    const url = new URL(_request.url)
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "100"), 200)
+    const cursor = url.searchParams.get("cursor")
+
     const messages = await db.directMessage.findMany({
       where: { conversationId },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       include: {
         sender: {
           select: {
@@ -59,6 +65,9 @@ export async function GET(
         },
       },
     })
+
+    // Reverse to chronological order for display
+    messages.reverse()
 
     // Mark all unread messages addressed to the current user as read
     await db.directMessage.updateMany({

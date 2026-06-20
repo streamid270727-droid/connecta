@@ -5,7 +5,7 @@ import { db } from "@/lib/db"
 
 async function getUserWithEmail(email: string) {
   const rows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    "SELECT id, email, name, password, avatarUrl, username, isVerified, role FROM User WHERE email = ?",
+    "SELECT id, email, name, password, \"avatarUrl\", username, \"isVerified\", role FROM \"User\" WHERE email = $1",
     email
   )
   return rows[0] ?? null
@@ -13,7 +13,7 @@ async function getUserWithEmail(email: string) {
 
 async function getUserWithId(id: string) {
   const rows = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    "SELECT id, avatarUrl, name, role FROM User WHERE id = ?",
+    "SELECT id, \"avatarUrl\", name, role FROM \"User\" WHERE id = $1",
     id
   )
   return rows[0] ?? null

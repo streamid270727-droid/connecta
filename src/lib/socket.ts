@@ -6,7 +6,9 @@ let socket: Socket | null = null
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io("/?XTransformPort=3003", {
+    const chatUrl = process.env.NEXT_PUBLIC_CHAT_SERVICE_URL || "http://localhost:3003"
+    socket = io(chatUrl, {
+      path: "/",
       transports: ["websocket", "polling"],
       forceNew: true,
       reconnection: true,

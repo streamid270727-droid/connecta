@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun --hot index.ts",
-    "start": "bun index.ts"
+    "start": "bun index.ts",
+    "postinstall": "bun install || npm install"
   },
   "dependencies": {
     "socket.io": "^4.8.3"

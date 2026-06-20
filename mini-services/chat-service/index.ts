@@ -8,8 +8,7 @@ const httpServer = createServer((req, res) => {
   }
 })
 const io = new Server(httpServer, {
-  // DO NOT change the path, it is used by Caddy to forward the request to the correct port
-  path: "/",
+  path: "/socket.io/",
   cors: {
     origin: "*",
     methods: ["GET", "POST"],

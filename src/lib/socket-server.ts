@@ -18,6 +18,7 @@ export function getServerSocket(): Promise<Socket | null> {
       // Connect to our own gateway, which forwards to port 3003
       // We use the gateway via relative path won't work in server context, so use localhost
       const sock = serverIo(process.env.CHAT_SERVICE_URL || "http://localhost:3003", {
+        path: "/socket.io/",
         transports: ["websocket"],
         forceNew: true,
         reconnection: true,

@@ -8,7 +8,7 @@ export function getSocket(): Socket {
   if (!socket) {
     const chatUrl = process.env.NEXT_PUBLIC_CHAT_SERVICE_URL || "http://localhost:3003"
     socket = io(chatUrl, {
-      path: "/",
+      path: "/socket.io/",
       transports: ["websocket", "polling"],
       forceNew: true,
       reconnection: true,
